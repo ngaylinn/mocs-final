@@ -68,7 +68,7 @@ def update_layer2(phenotypes, weights, population_index, step, row, col):
             next_state += prev_state * weights[population_index][weight_index]
             weight_index += 1
 
-    # Look at layer1 state in a Moore neighborhood around (row, col)
+    # Look at layer2 state in a Moore neighborhood around (row, col)
     for r in range(row-g, row+g+1, g):
         for c in range(col-g, col+g+1, g):
             # Do wrap-around bounds checking. This may be inefficient, since
