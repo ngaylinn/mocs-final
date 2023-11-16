@@ -117,52 +117,23 @@ def look_up(layer, phenotypes, genotypes, pop_idx, step, row, col):
 
 
 @cuda.jit
-def update_layer2(phenotypes, genotypes, pop_idx, step, row, col):
-    """Compute the next state for a single cell in layer2 from prev states."""
-    layer = 2
-
-    # Calculate the weighted sum of all neighbors.
-    weighted_sum = look_down(layer, phenotypes, genotypes, pop_idx, step, row, col)
-    weighted_sum += look_around(layer, phenotypes, genotypes, pop_idx, step, row, col)
-    # Don't look up.
-
-    # Actually update the phenotype state for step on layer1 at (row, col).
-    prev_state = phenotypes[pop_idx][step-1][layer][row][col]
-    phenotypes[pop_idx][step][layer][row][col] = activate(
-        layer, genotypes, pop_idx, prev_state, weighted_sum)
-
-
-@cuda.jit
-def update_layer1(phenotypes, genotypes, pop_idx, step, row, col):
-    """Compute the next state for a single cell in layer1 from prev states."""
-    layer = 1
-
-    # Calculate the weighted sum of all neighbors.
-    weighted_sum = look_down(layer, phenotypes, genotypes, pop_idx, step, row, col)
-    weighted_sum += look_around(layer, phenotypes, genotypes, pop_idx, step, row, col)
-    weighted_sum += look_up(layer, phenotypes, genotypes, pop_idx, step, row, col)
-
-    # Actually update the phenotype state for step on layer1 at (row, col).
-    prev_state = phenotypes[pop_idx][step-1][layer][row][col]
-    phenotypes[pop_idx][step][layer][row][col] = activate(
-        layer, genotypes, pop_idx, prev_state, weighted_sum)
-
-
-@cuda.jit
-def update_layer0(phenotypes, genotypes, pop_idx, step, row, col):
+def update_cell(layer, phenotypes, genotypes, pop_idx, step, row, col):
     """Compute the next state for a single cell in layer0 from prev states."""
-    layer = 0
-
     # Calculate the weighted sum of all neighbors.
-    # Don't look down.
     weighted_sum = 0
-    weighted_sum = look_around(layer, phenotypes, genotypes, pop_idx, step, row, col)
-    weighted_sum += look_up(layer, phenotypes, genotypes, pop_idx, step, row, col)
+    if layer > 0:
+        weighted_sum += look_down(
+            layer, phenotypes, genotypes, pop_idx, step, row, col)
+    weighted_sum += look_around(
+        layer, phenotypes, genotypes, pop_idx, step, row, col)
+    if layer < 2:
+        weighted_sum += look_up(
+            layer, phenotypes, genotypes, pop_idx, step, row, col)
 
     # Actually update the phenotype state for step on layer1 at (row, col).
     prev_state = phenotypes[pop_idx][step-1][layer][row][col]
     phenotypes[pop_idx][step][layer][row][col] = activate(
-        0, genotypes, pop_idx, prev_state, weighted_sum)
+        layer, genotypes, pop_idx, prev_state, weighted_sum)
 
 
 # Max registers can be tuned per device. 64 is the most my laptop can handle.
@@ -180,17 +151,8 @@ def simulation_kernel(genotypes, layers, phenotypes):
         # This thread will compute COLS_PER_THREAD contiguous cells from row,
         # starting at start_col.
         for col in range(start_col, start_col + COLS_PER_THREAD):
-            # Update the state in layer0
-            update_layer0(
-                phenotypes, genotypes, pop_idx, step, row, col)
-            # If this individual uses layer1, update that, too.
-            if layers[pop_idx] > 0:
-                update_layer1(
-                    phenotypes, genotypes, pop_idx, step, row, col)
-            # If this individual uses layer2, update that, too.
-            if layers[pop_idx] > 1:
-                update_layer2(
-                    phenotypes, genotypes, pop_idx, step, row, col)
+            for layer in range(0, layers[pop_idx] + 1):
+                update_cell(layer, phenotypes, genotypes, pop_idx, step, row, col)
         # Make sure all threads have finished computing this step before going
         # on to the next one.
         cuda.syncthreads()
