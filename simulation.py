@@ -303,19 +303,19 @@ def demo():
             3, # Spawn threshold low
             3, # Spawn threshold high
             4, # Overpopulation threshold
-            0, # Down neighbor (N/A)
-            0, # Down neighbor (N/A)
-            0, # Down neighbor (N/A)
-            0, # Down neighbor (N/A)
-            1, # Around neighbor
-            1, # Around neighbor
-            1, # Around neighbor
-            1, # Around neighbor
+            0, # Down neighbor NW (N/A)
+            0, # Down neighbor NE (N/A)
+            0, # Down neighbor SW (N/A)
+            0, # Down neighbor SE (N/A)
+            1, # Around neighbor NW
+            1, # Around neighbor N
+            1, # Around neighbor NE
+            1, # Around neighbor W
             0, # This cell.
-            1, # Around neighbor
-            1, # Around neighbor
-            1, # Around neighbor
-            1, # Around neighbor
+            1, # Around neighbor E
+            1, # Around neighbor SW
+            1, # Around neighbor S
+            1, # Around neighbor SE
             0, # Up neighbor
          ],
          [ # Layer1 (highlight live cells below)
@@ -323,19 +323,19 @@ def demo():
             1, # Spawn threshold low
             4, # Spawn threshold high
             5, # Overpopulation threshold
-            1, # Down neighbor
-            1, # Down neighbor
-            1, # Down neighbor
-            1, # Down neighbor
-            0, # Around neighbor
-            0, # Around neighbor
-            0, # Around neighbor
-            0, # Around neighbor
+            1, # Down neighbor NW
+            1, # Down neighbor NE
+            1, # Down neighbor SW
+            1, # Down neighbor SE
+            0, # Around neighbor NW
+            0, # Around neighbor N
+            0, # Around neighbor NE
+            0, # Around neighbor W
             0, # This cell.
-            0, # Around neighbor
-            0, # Around neighbor
-            0, # Around neighbor
-            0, # Around neighbor
+            0, # Around neighbor E
+            0, # Around neighbor SW
+            0, # Around neighbor S
+            0, # Around neighbor SE
             0, # Up neighbor
          ],
          [ # Layer2 (highlight live cells below)
@@ -343,20 +343,20 @@ def demo():
             1, # Spawn threshold low
             4, # Spawn threshold high
             5, # Overpopulation threshold
-            1, # Down neighbor
-            1, # Down neighbor
-            1, # Down neighbor
-            1, # Down neighbor
-            0, # Around neighbor
-            0, # Around neighbor
-            0, # Around neighbor
-            0, # Around neighbor
+            1, # Down neighbor NW
+            1, # Down neighbor NE
+            1, # Down neighbor SW
+            1, # Down neighbor SE
+            0, # Around neighbor NW
+            0, # Around neighbor N
+            0, # Around neighbor NE
+            0, # Around neighbor W
             0, # This cell.
-            0, # Around neighbor
-            0, # Around neighbor
-            0, # Around neighbor
-            0, # Around neighbor
-            0, # Up neighbor
+            0, # Around neighbor E
+            0, # Around neighbor SW
+            0, # Around neighbor S
+            0, # Around neighbor SE
+            0, # Up neighbor (N/A)
          ]],
         dtype=np.uint8)
 
