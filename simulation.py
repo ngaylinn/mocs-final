@@ -1,6 +1,7 @@
 import time
 
 from numba import cuda
+from numba.cuda.cudadrv.libs import cublas
 import numpy as np
 from PIL import Image
 
@@ -26,11 +27,14 @@ COLS_PER_THREAD = WORLD_SIZE // COL_BATCH_SIZE
 NUM_DOWN_WEIGHTS = 4
 NUM_AROUND_WEIGHTS = 9
 NUM_UP_WEIGHTS = 1
-TOTAL_WEIGHTS = NUM_DOWN_WEIGHTS + NUM_AROUND_WEIGHTS + NUM_UP_WEIGHTS
+NUM_INPUT_NEURONS = NUM_DOWN_WEIGHTS + NUM_AROUND_WEIGHTS + NUM_UP_WEIGHTS
+# Each cell at the bottom level has 5 output neurons
+# 4 binary outputs for spreading up/left/right/down, 1 for self signal state
+NUM_OUTPUT_NEURONS = 5
 
 # The genome consists of weights for all layers and an activation function
 # which is represented with four scalar values.
-LAYER_GENOME_SIZE = TOTAL_WEIGHTS + 4
+LAYER_GENOME_SHAPE = (NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS) 
 
 # Genome indices for thersholds of a non-linear activation function:
 LONELINESS_THRESHOLD = 0
@@ -44,7 +48,7 @@ UP_WEIGHTS_START = AROUND_WEIGHTS_START + NUM_AROUND_WEIGHTS
 
 
 @cuda.jit
-def activate(layer, genotypes, pop_idx, prev_state, weighted_sum):
+def activate_binary(layer, genotypes, pop_idx, prev_state, weighted_sum):
     """Compute a cell's new value given the weighted sum of its neighbors."""
     if weighted_sum <= genotypes[pop_idx][layer][LONELINESS_THRESHOLD]:
         return DEAD
@@ -54,6 +58,10 @@ def activate(layer, genotypes, pop_idx, prev_state, weighted_sum):
     if weighted_sum >= genotypes[pop_idx][layer][OVERPOPULATION_THRESHOLD]:
         return DEAD
     return prev_state
+
+@cuda.jit
+def activate_sigmoid(weighted_sum):
+    return 1 / (1 + np.e ** (-weighted_sum))
 
 
 @cuda.jit
@@ -119,21 +127,27 @@ def look_up(layer, phenotypes, genotypes, pop_idx, step, row, col):
 @cuda.jit
 def update_cell(layer, phenotypes, genotypes, pop_idx, step, row, col):
     """Compute the next state for a single cell in layer0 from prev states."""
+
     # Calculate the weighted sum of all neighbors.
     weighted_sum = 0
-    if layer > 0:
-        weighted_sum += look_down(
-            layer, phenotypes, genotypes, pop_idx, step, row, col)
-    weighted_sum += look_around(
-        layer, phenotypes, genotypes, pop_idx, step, row, col)
-    if layer < 2:
-        weighted_sum += look_up(
-            layer, phenotypes, genotypes, pop_idx, step, row, col)
+    if layer == 0:
+        around_signal_sum, around_spread_sum = look_around(layer, phenotypes, genotypes, pop_idx, step, row, col)
+        up_signal_sum, up_spread_sum = look_up(layer, phenotypes, genotypes, pop_idx, step, row, col)
+        weighted_sum += around_signal_sum + up_signal_sum
+
+    else:
+        if layer > 0:
+            weighted_sum += look_down(layer, phenotypes, genotypes, pop_idx, step, row, col)
+        weighted_sum += look_around(layer, phenotypes, genotypes, pop_idx, step, row, col)
+        if layer < 2:
+            weighted_sum += look_up(layer, phenotypes, genotypes, pop_idx, step, row, col)
 
     # Actually update the phenotype state for step on layer1 at (row, col).
-    prev_state = phenotypes[pop_idx][step-1][layer][row][col]
-    phenotypes[pop_idx][step][layer][row][col] = activate(
-        layer, genotypes, pop_idx, prev_state, weighted_sum)
+
+    # prev_state = phenotypes[pop_idx][step-1][layer][row][col]
+    # phenotypes[pop_idx][step][layer][row][col] = activate_binary(
+    #     layer, genotypes, pop_idx, prev_state, weighted_sum)
+    phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(weighted_sum)
 
 
 # Max registers can be tuned per device. 64 is the most my laptop can handle.
@@ -158,6 +172,19 @@ def simulation_kernel(genotypes, layers, phenotypes):
         # on to the next one.
         cuda.syncthreads()
 
+def get_layer_mask(l):
+    """Mask the genome (the NN weights) for a given layer"""
+    mask = np.zeros(LAYER_GENOME_SHAPE)
+    if l == 0:   # L=0: All
+        mask[NUM_DOWN_WEIGHTS:][:] = 1
+    elif l == 1: # L=1: All inputs, single output
+        mask[:][0] = 1
+    elif l == 2: # L=2: All inputs except above
+        mask[NUM_UP_WEIGHTS:][0] = 1
+
+    print(f'L={l}', mask)
+    return mask
+
 
 def check_granularity(g, image):
     """Returns True iff image is tiled with g x g squares of a single value."""
@@ -176,7 +203,7 @@ def simulate(genotypes, layers, phenotypes):
 
     # Each individual has a genotype that consists of an activation function
     # and a set of neighbor weights for each layer in the hierarchical CA.
-    assert genotypes.shape == (pop_size, 3, LAYER_GENOME_SIZE)
+    assert genotypes.shape == (pop_size, 3, LAYER_GENOME_SHAPE[0], LAYER_GENOME_SHAPE[1])
     assert genotypes.dtype == np.uint8
 
     # Each individual is configured to have 0, 1, or 2 extra layers. This way,
@@ -241,6 +268,24 @@ def make_seed_phenotypes(pop_size):
         middle = WORLD_SIZE // 2
         phenotypes[i][0][0][middle][middle] = ALIVE
 
+    return phenotypes
+
+def make_seed_genotypes(pop_size):
+    """Starting genotypes: random initialization"""
+    # Randomly initialize the NN weights
+    genotypes = np.random.random((pop_size, 3, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS))
+    
+    # Mask out the weights of layers 1 and 2
+    for l in range(NUM_LAYERS):
+        genotypes[:][l] = genotypes[:][l] * get_layer_mask(l)
+
+    print(genotypes[0][0])
+    print(genotypes[0][1])
+    print(genotypes[0][2])
+    exit(1)
+    
+    return genotypes
+
 
 def compute_fitness(phenotypes, target):
     """Score a set of phenotypes generated by the simulate function."""
@@ -298,72 +343,8 @@ def demo():
     # simulation will be.
     pop_size = 2500
 
-    gol_genotype = np.array(
-        [[ # Layer0 (Game of Life rules)
-            1, # Loneliness threshold
-            3, # Spawn threshold low
-            3, # Spawn threshold high
-            4, # Overpopulation threshold
-            0, # Down neighbor NW (N/A)
-            0, # Down neighbor NE (N/A)
-            0, # Down neighbor SW (N/A)
-            0, # Down neighbor SE (N/A)
-            1, # Around neighbor NW
-            1, # Around neighbor N
-            1, # Around neighbor NE
-            1, # Around neighbor W
-            0, # This cell.
-            1, # Around neighbor E
-            1, # Around neighbor SW
-            1, # Around neighbor S
-            1, # Around neighbor SE
-            0, # Up neighbor
-         ],
-         [ # Layer1 (highlight live cells below)
-            0, # Loneliness threshold
-            1, # Spawn threshold low
-            4, # Spawn threshold high
-            5, # Overpopulation threshold
-            1, # Down neighbor NW
-            1, # Down neighbor NE
-            1, # Down neighbor SW
-            1, # Down neighbor SE
-            0, # Around neighbor NW
-            0, # Around neighbor N
-            0, # Around neighbor NE
-            0, # Around neighbor W
-            0, # This cell.
-            0, # Around neighbor E
-            0, # Around neighbor SW
-            0, # Around neighbor S
-            0, # Around neighbor SE
-            0, # Up neighbor
-         ],
-         [ # Layer2 (highlight live cells below)
-            0, # Loneliness threshold
-            1, # Spawn threshold low
-            4, # Spawn threshold high
-            5, # Overpopulation threshold
-            1, # Down neighbor NW
-            1, # Down neighbor NE
-            1, # Down neighbor SW
-            1, # Down neighbor SE
-            0, # Around neighbor NW
-            0, # Around neighbor N
-            0, # Around neighbor NE
-            0, # Around neighbor W
-            0, # This cell.
-            0, # Around neighbor E
-            0, # Around neighbor SW
-            0, # Around neighbor S
-            0, # Around neighbor SE
-            0, # Up neighbor (N/A)
-         ]],
-        dtype=np.uint8)
-
     # Give every individual in the population the same genotype.
-    genotypes = np.broadcast_to(
-        gol_genotype, (pop_size, 3, LAYER_GENOME_SIZE))
+    genotypes = make_seed_genotypes(pop_size)
 
     # Generate a mix of simulations with 0, 1, or 2 layers.
     # Pattern is: 0, 1, 2, 0, 1, 2, 0, 1, 2, ...
@@ -371,35 +352,9 @@ def demo():
     layers[1:3] = 1
     layers[2:3] = 2
 
-    # Set up a GOL scenario where a glider will crash into a pinwheel as the
-    # initial phenotype state for all the simulations.
-    glider = np.array(
-        [[0, 1, 0],
-         [0, 0, 1],
-         [1, 1, 1]],
-        dtype=np.uint8)
+    phenotypes = make_seed_phenotypes(pop_size)
 
-    pinwheel = np.array(
-        [[0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0],
-         [0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0],
-         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-         [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0],
-         [1, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0],
-         [1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0],
-         [0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 1],
-         [0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1],
-         [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0],
-         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-         [0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0],
-         [0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0]],
-        dtype=np.uint8)
 
-    phenotypes = np.full(
-        (pop_size, NUM_STEPS, NUM_LAYERS, WORLD_SIZE, WORLD_SIZE),
-        DEAD, dtype=np.uint8)
-    for i in range(pop_size):
-        phenotypes[i][0][0][32:44, 32:44] = pinwheel
-        phenotypes[i][0][0][16:19, 16:19] = glider
 
     # Actually run the simulations, and time how long it takes.
     print(f'Starting {pop_size} simulations...')
