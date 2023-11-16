@@ -151,6 +151,7 @@ def simulation_kernel(genotypes, layers, phenotypes):
         # This thread will compute COLS_PER_THREAD contiguous cells from row,
         # starting at start_col.
         for col in range(start_col, start_col + COLS_PER_THREAD):
+            # Update the state in every layer this individual uses.
             for layer in range(0, layers[pop_idx] + 1):
                 update_cell(layer, phenotypes, genotypes, pop_idx, step, row, col)
         # Make sure all threads have finished computing this step before going
