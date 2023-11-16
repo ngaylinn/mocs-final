@@ -37,27 +37,27 @@ NUM_OUTPUT_NEURONS = 5
 LAYER_GENOME_SHAPE = (NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS) 
 
 # Genome indices for thersholds of a non-linear activation function:
-LONELINESS_THRESHOLD = 0
-SPAWN_THRESHOLD_LOW = LONELINESS_THRESHOLD + 1
-SPAWN_THRESHOLD_HIGH = SPAWN_THRESHOLD_LOW + 1
-OVERPOPULATION_THRESHOLD = SPAWN_THRESHOLD_HIGH + 1
+# LONELINESS_THRESHOLD = 0
+# SPAWN_THRESHOLD_LOW = LONELINESS_THRESHOLD + 1
+# SPAWN_THRESHOLD_HIGH = SPAWN_THRESHOLD_LOW + 1
+# OVERPOPULATION_THRESHOLD = SPAWN_THRESHOLD_HIGH + 1
 # Genome indices for neighbor weights:
-DOWN_WEIGHTS_START = OVERPOPULATION_THRESHOLD + 1
+DOWN_WEIGHTS_START = 0
 AROUND_WEIGHTS_START = DOWN_WEIGHTS_START + NUM_DOWN_WEIGHTS
 UP_WEIGHTS_START = AROUND_WEIGHTS_START + NUM_AROUND_WEIGHTS
 
 
-@cuda.jit
-def activate_binary(layer, genotypes, pop_idx, prev_state, weighted_sum):
-    """Compute a cell's new value given the weighted sum of its neighbors."""
-    if weighted_sum <= genotypes[pop_idx][layer][LONELINESS_THRESHOLD]:
-        return DEAD
-    if (weighted_sum >= genotypes[pop_idx][layer][SPAWN_THRESHOLD_LOW] and
-        weighted_sum <= genotypes[pop_idx][layer][SPAWN_THRESHOLD_HIGH]):
-        return ALIVE
-    if weighted_sum >= genotypes[pop_idx][layer][OVERPOPULATION_THRESHOLD]:
-        return DEAD
-    return prev_state
+# @cuda.jit
+# def activate_binary(layer, genotypes, pop_idx, prev_state, weighted_sum):
+#     """Compute a cell's new value given the weighted sum of its neighbors."""
+#     if weighted_sum <= genotypes[pop_idx][layer][LONELINESS_THRESHOLD]:
+#         return DEAD
+#     if (weighted_sum >= genotypes[pop_idx][layer][SPAWN_THRESHOLD_LOW] and
+#         weighted_sum <= genotypes[pop_idx][layer][SPAWN_THRESHOLD_HIGH]):
+#         return ALIVE
+#     if weighted_sum >= genotypes[pop_idx][layer][OVERPOPULATION_THRESHOLD]:
+#         return DEAD
+#     return prev_state
 
 @cuda.jit
 def activate_sigmoid(weighted_sum):
@@ -67,6 +67,9 @@ def activate_sigmoid(weighted_sum):
 @cuda.jit
 def look_down(layer, phenotypes, genotypes, pop_idx, step, row, col):
     """Compute the weighted sum of this cell's neighbors in the layer below."""
+    if layer == 0:
+        return 0
+
     # The "granularity" of this layer. Layer0 == 1, layer1 == 2, layer2 == 4.
     g = 1 << layer
 
@@ -109,7 +112,7 @@ def look_around(layer, phenotypes, genotypes, pop_idx, step, row, col):
             r = r % WORLD_SIZE
             c = c % WORLD_SIZE
             neighbor_state = phenotypes[pop_idx][step-1][layer][r][c]
-            weight = genotypes[pop_idx][layer][weight_index]
+            weight = genotypes[pop_idx, layer][weight_index, 0]
             result += neighbor_state * weight
             weight_index += 1
     return result
@@ -118,10 +121,25 @@ def look_around(layer, phenotypes, genotypes, pop_idx, step, row, col):
 @cuda.jit
 def look_up(layer, phenotypes, genotypes, pop_idx, step, row, col):
     """Compute the weighted sum of this cell's neighbors in the layer above."""
+    if layer == 2:
+        return 0
     # Look at just the single neighbor in the next layer up.
     neighbor_state = phenotypes[pop_idx][step-1][layer+1][row][col]
-    weight = genotypes[pop_idx][layer][UP_WEIGHTS_START]
+    weight = genotypes[pop_idx, layer][UP_WEIGHTS_START, 0]
     return neighbor_state * weight
+
+@cuda.jit
+def get_spread_update(phenotypes, genotypes, pop_idx, step, row, col): # L=0
+    up_neighbor = phenotypes[pop_idx][step-1][1][row][col]
+    around_neighbors = np.zeros((3,3))
+    for i,r in enumerate(range(row-1, row+2, 1)):
+        for j,c in enumerate(range(col-1, col+2, 1)):
+            r = r % WORLD_SIZE
+            c = c % WORLD_SIZE
+            around_neighbors[i, j] = phenotypes[pop_idx][step-1][0][r][c]
+
+    # Up, down, left, right
+
 
 
 @cuda.jit
@@ -129,25 +147,20 @@ def update_cell(layer, phenotypes, genotypes, pop_idx, step, row, col):
     """Compute the next state for a single cell in layer0 from prev states."""
 
     # Calculate the weighted sum of all neighbors.
-    weighted_sum = 0
-    if layer == 0:
-        around_signal_sum, around_spread_sum = look_around(layer, phenotypes, genotypes, pop_idx, step, row, col)
-        up_signal_sum, up_spread_sum = look_up(layer, phenotypes, genotypes, pop_idx, step, row, col)
-        weighted_sum += around_signal_sum + up_signal_sum
+    down_signal_sum = look_down(layer, phenotypes, genotypes, pop_idx, step, row, col) # Should return 0 for L=0
+    around_signal_sum = look_around(layer, phenotypes, genotypes, pop_idx, step, row, col) 
+    up_signal_sum = look_up(layer, phenotypes, genotypes, pop_idx, step, row, col)
 
-    else:
-        if layer > 0:
-            weighted_sum += look_down(layer, phenotypes, genotypes, pop_idx, step, row, col)
-        weighted_sum += look_around(layer, phenotypes, genotypes, pop_idx, step, row, col)
-        if layer < 2:
-            weighted_sum += look_up(layer, phenotypes, genotypes, pop_idx, step, row, col)
+    signal_sum = down_signal_sum + around_signal_sum + up_signal_sum
 
     # Actually update the phenotype state for step on layer1 at (row, col).
+    phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
 
-    # prev_state = phenotypes[pop_idx][step-1][layer][row][col]
-    # phenotypes[pop_idx][step][layer][row][col] = activate_binary(
-    #     layer, genotypes, pop_idx, prev_state, weighted_sum)
-    phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(weighted_sum)
+    # Update cells to be alive if on L=0 (only if current cell is actually alive)
+    # if layer == 0 and phenotypes[pop_idx][step][layer][row][col] != 0:
+
+
+
 
 
 # Max registers can be tuned per device. 64 is the most my laptop can handle.
@@ -176,13 +189,12 @@ def get_layer_mask(l):
     """Mask the genome (the NN weights) for a given layer"""
     mask = np.zeros(LAYER_GENOME_SHAPE)
     if l == 0:   # L=0: All
-        mask[NUM_DOWN_WEIGHTS:][:] = 1
+        mask[AROUND_WEIGHTS_START:][:] = 1
     elif l == 1: # L=1: All inputs, single output
-        mask[:][0] = 1
+        mask[:, 0] = 1
     elif l == 2: # L=2: All inputs except above
-        mask[NUM_UP_WEIGHTS:][0] = 1
+        mask[DOWN_WEIGHTS_START:UP_WEIGHTS_START, 0] = 1
 
-    print(f'L={l}', mask)
     return mask
 
 
@@ -203,7 +215,7 @@ def simulate(genotypes, layers, phenotypes):
 
     # Each individual has a genotype that consists of an activation function
     # and a set of neighbor weights for each layer in the hierarchical CA.
-    assert genotypes.shape == (pop_size, 3, LAYER_GENOME_SHAPE[0], LAYER_GENOME_SHAPE[1])
+    assert genotypes.shape == (pop_size, 3, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS)
     assert genotypes.dtype == np.uint8
 
     # Each individual is configured to have 0, 1, or 2 extra layers. This way,
@@ -277,13 +289,8 @@ def make_seed_genotypes(pop_size):
     
     # Mask out the weights of layers 1 and 2
     for l in range(NUM_LAYERS):
-        genotypes[:][l] = genotypes[:][l] * get_layer_mask(l)
+        genotypes[:, l] = genotypes[:, l] * get_layer_mask(l)
 
-    print(genotypes[0][0])
-    print(genotypes[0][1])
-    print(genotypes[0][2])
-    exit(1)
-    
     return genotypes
 
 
