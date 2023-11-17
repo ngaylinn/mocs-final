@@ -1,5 +1,6 @@
 import time
 
+import matplotlib.pyplot as plt
 from numba import cuda
 import numpy as np
 from PIL import Image
@@ -60,7 +61,16 @@ UP_WEIGHTS_START = AROUND_WEIGHTS_START + NUM_AROUND_WEIGHTS
 
 @cuda.jit
 def activate_sigmoid(weighted_sum):
+    if weighted_sum <= 0:
+        return 0
     return 1 / (1 + np.e ** (-weighted_sum))
+
+@cuda.jit
+def activate_relu(weighted_sum):
+    if weighted_sum <= 0:
+        return 0
+    return weighted_sum
+
 
 
 @cuda.jit
@@ -284,7 +294,7 @@ def make_seed_phenotypes(pop_size):
 def make_seed_genotypes(pop_size):
     """Starting genotypes: random initialization"""
     # Randomly initialize the NN weights
-    genotypes = np.random.random((pop_size, 3, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS)).astype(np.float32)
+    genotypes = np.random.random((pop_size, 3, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS)).astype(np.float32) * 2 - 1
     
     # Mask out the weights of layers 1 and 2
     for l in range(NUM_LAYERS):
@@ -318,7 +328,7 @@ def compute_fitness(phenotypes, target):
 def visualize(phenotype, filename):
     def make_frame(frame_data):
         # Scale up the image 4x to make it more visible.
-        frame_data = frame_data.repeat(4, 1).repeat(4, 2)
+        # frame_data = frame_data.repeat(4, 1).repeat(4, 2)
         layer0, layer1, layer2 = frame_data
         l, w = layer0.shape
         # print(layer0[l//2-1:l//2+5, w//2-1:w//2+5])
@@ -331,12 +341,13 @@ def visualize(phenotype, filename):
         #         layer2 * 0xff00ff00), # layer2 in green
         #     dtype=np.uint32)
         # Render layer0 as a black and white image.
-        # base = np.array(
-        #     np.bitwise_or(
-        #         (layer0 == DEAD) * 0xffffffff,   # DEAD cells are black
-        #         (layer0 != DEAD) * 0xff000000), # ALIVE cells are white
-        #     dtype=np.uint32)
+        base = np.array(
+            np.bitwise_or(
+                (layer0 != DEAD) * 0xffffffff,   # DEAD cells are black
+                (layer0 == DEAD) * 0xff000000), # ALIVE cells are white
+            dtype=np.uint32)
         # Merge the base and overlay images.
+        # return layer0
         return Image.fromarray(layer0, mode='RGBA')
         # return Image.blend(
         #     Image.fromarray(base, mode='RGBA'),
@@ -344,7 +355,10 @@ def visualize(phenotype, filename):
         #     0.3)
 
     frames = [make_frame(frame_data) for frame_data in phenotype]
-    frames[0].save(filename, save_all=True, append_images=frames[1:], loop=0)
+    # plt.imshow(frames[1])
+    # plt.show()
+    
+    frames[0].save(filename, save_all=True, append_images=frames[1:], loop=0, duration=10)
 
 
 def demo():
