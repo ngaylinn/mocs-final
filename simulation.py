@@ -46,31 +46,18 @@ DOWN_WEIGHTS_START = 0
 AROUND_WEIGHTS_START = DOWN_WEIGHTS_START + NUM_DOWN_WEIGHTS
 UP_WEIGHTS_START = AROUND_WEIGHTS_START + NUM_AROUND_WEIGHTS
 
+LEFT_SPREAD_WEIGHTS_COL_IDX = 1
+RIGHT_SPREAD_WEIGHTS_COL_IDX = 2
+UP_SPREAD_WEIGHTS_COL_IDX = 3
+DOWN_SPREAD_WEIGHTS_COL_IDX = 4
 
-# @cuda.jit
-# def activate_binary(layer, genotypes, pop_idx, prev_state, weighted_sum):
-#     """Compute a cell's new value given the weighted sum of its neighbors."""
-#     if weighted_sum <= genotypes[pop_idx][layer][LONELINESS_THRESHOLD]:
-#         return DEAD
-#     if (weighted_sum >= genotypes[pop_idx][layer][SPAWN_THRESHOLD_LOW] and
-#         weighted_sum <= genotypes[pop_idx][layer][SPAWN_THRESHOLD_HIGH]):
-#         return ALIVE
-#     if weighted_sum >= genotypes[pop_idx][layer][OVERPOPULATION_THRESHOLD]:
-#         return DEAD
-#     return prev_state
 
 @cuda.jit
 def activate_sigmoid(weighted_sum):
+    """If the weighted sum is negative, """
     if weighted_sum <= 0:
         return 0
     return 1 / (1 + np.e ** (-weighted_sum))
-
-@cuda.jit
-def activate_relu(weighted_sum):
-    if weighted_sum <= 0:
-        return 0
-    return weighted_sum
-
 
 
 @cuda.jit
@@ -139,21 +126,58 @@ def look_up(layer, phenotypes, genotypes, pop_idx, step, row, col):
 
 @cuda.jit
 def get_spread_update(phenotypes, genotypes, pop_idx, step, row, col): # L=0
-    up_neighbor = phenotypes[pop_idx][step-1][1][row][col]
-    around_neighbors = np.zeros((3,3))
+    left_spread_weighted_sum = 0
+    right_spread_weighted_sum = 0
+    up_spread_weighted_sum = 0
+    down_spread_weighted_sum = 0
+
+    # Sum over same-level neighbors
+    weight_idx = AROUND_WEIGHTS_START
     for i,r in enumerate(range(row-1, row+2, 1)):
         for j,c in enumerate(range(col-1, col+2, 1)):
             r = r % WORLD_SIZE
             c = c % WORLD_SIZE
-            around_neighbors[i, j] = phenotypes[pop_idx][step-1][0][r][c]
+            neighbor_val = phenotypes[pop_idx][step-1][0][r][c]
 
-    # Up, down, left, right spreading
+            left_weight = genotypes[pop_idx, 0][weight_idx, LEFT_SPREAD_WEIGHTS_COL_IDX]
+            right_weight = genotypes[pop_idx, 0][weight_idx, RIGHT_SPREAD_WEIGHTS_COL_IDX]
+            up_weight = genotypes[pop_idx, 0][weight_idx, LEFT_SPREAD_WEIGHTS_COL_IDX]
+            down_weight = genotypes[pop_idx, 0][weight_idx, RIGHT_SPREAD_WEIGHTS_COL_IDX]
+
+            left_spread_weighted_sum += left_weight * neighbor_val
+            right_spread_weighted_sum += right_weight * neighbor_val
+            up_spread_weighted_sum += up_weight * neighbor_val
+            down_spread_weighted_sum += down_weight * neighbor_val
+
+            weight_idx += 1
+
+    # Add the above layer's input
+    up_neighbor_val = phenotypes[pop_idx][step-1][1][row][col]
+    left_weight = genotypes[pop_idx, 0][weight_idx, LEFT_SPREAD_WEIGHTS_COL_IDX]
+    right_weight = genotypes[pop_idx, 0][weight_idx, RIGHT_SPREAD_WEIGHTS_COL_IDX]
+    up_weight = genotypes[pop_idx, 0][weight_idx, LEFT_SPREAD_WEIGHTS_COL_IDX]
+    down_weight = genotypes[pop_idx, 0][weight_idx, RIGHT_SPREAD_WEIGHTS_COL_IDX]
+
+    left_spread_weighted_sum += left_weight * up_neighbor_val
+    right_spread_weighted_sum += right_weight * up_neighbor_val
+    up_spread_weighted_sum += up_weight * up_neighbor_val
+    down_spread_weighted_sum += down_weight * up_neighbor_val
+
+    # print(left_spread_weighted_sum, right_spread_weighted_sum, up_spread_weighted_sum, down_spread_weighted_sum)
+
+    # Binarize
+    return (left_spread_weighted_sum > 0,
+            right_spread_weighted_sum > 0,
+            up_spread_weighted_sum > 0,
+            down_spread_weighted_sum > 0)
 
 
 
 @cuda.jit
 def update_cell(layer, phenotypes, genotypes, pop_idx, step, row, col):
     """Compute the next state for a single cell in layer0 from prev states."""
+#    if phenotypes[pop_idx][step][layer][row][col] == 0:
+#         return 
 
     # Calculate the weighted sum of all neighbors.
     down_signal_sum = look_down(layer, phenotypes, genotypes, pop_idx, step, row, col) # Should return 0 for L=0
@@ -168,9 +192,17 @@ def update_cell(layer, phenotypes, genotypes, pop_idx, step, row, col):
     # Update cells to be alive if on L=0 (only if current cell is actually alive)
     if layer == 0 and phenotypes[pop_idx][step][layer][row][col] != 0:
         # Spread to nearby cells... is this necessary?
-        # get_spread_update(phenotypes, genotypes, pop_idx, step, row, col)
-        pass
-
+        (left, right, up, down) = get_spread_update(phenotypes, genotypes, pop_idx, step, row, col)
+        
+        if left:
+            phenotypes[pop_idx][step][layer][(row % WORLD_SIZE)][((col-1) % WORLD_SIZE)] = 0.5
+        if right:
+            phenotypes[pop_idx][step][layer][(row % WORLD_SIZE)][((col+1) % WORLD_SIZE)] = 0.5
+        if up:
+            phenotypes[pop_idx][step][layer][((row-1) % WORLD_SIZE)][(col % WORLD_SIZE)] = 0.5
+        if down:
+            phenotypes[pop_idx][step][layer][((row+1) % WORLD_SIZE)][(col % WORLD_SIZE)] = 0.5
+        
 
 # Max registers can be tuned per device. 64 is the most my laptop can handle.
 @cuda.jit(max_registers=64)
@@ -347,7 +379,7 @@ def visualize(phenotype, filename):
                 (layer0 == DEAD) * 0xff000000), # ALIVE cells are white
             dtype=np.uint32)
         # Merge the base and overlay images.
-        # return layer0
+        # return layer1
         return Image.fromarray(layer0, mode='RGBA')
         # return Image.blend(
         #     Image.fromarray(base, mode='RGBA'),
@@ -355,7 +387,9 @@ def visualize(phenotype, filename):
         #     0.3)
 
     frames = [make_frame(frame_data) for frame_data in phenotype]
-    # plt.imshow(frames[1])
+    # plt.imshow(frames[11])
+    # plt.show()
+    # plt.imshow(frames[12])
     # plt.show()
     
     frames[0].save(filename, save_all=True, append_images=frames[1:], loop=0, duration=10)
@@ -366,7 +400,7 @@ def demo():
     # The number of simulations to run in one batch. This is limited by the
     # available GPU memory, but the bigger this number the more efficient the
     # simulation will be.
-    pop_size = 100
+    pop_size = 700
 
     # Give every individual in the population the same genotype.
     genotypes = make_seed_genotypes(pop_size)
