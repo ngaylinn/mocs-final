@@ -1,7 +1,6 @@
 import time
 
 from numba import cuda
-from numba.cuda.cudadrv.libs import cublas
 import numpy as np
 from PIL import Image
 
@@ -87,7 +86,7 @@ def look_down(layer, phenotypes, genotypes, pop_idx, step, row, col):
             r = r % WORLD_SIZE
             c = c % WORLD_SIZE
             neighbor_state = phenotypes[pop_idx][step-1][layer-1][r][c]
-            weight = genotypes[pop_idx][layer][weight_index]
+            weight = genotypes[pop_idx, layer][weight_index, 0]
             result += neighbor_state * weight
             weight_index += 1
     return result
@@ -138,7 +137,7 @@ def get_spread_update(phenotypes, genotypes, pop_idx, step, row, col): # L=0
             c = c % WORLD_SIZE
             around_neighbors[i, j] = phenotypes[pop_idx][step-1][0][r][c]
 
-    # Up, down, left, right
+    # Up, down, left, right spreading
 
 
 
@@ -157,10 +156,10 @@ def update_cell(layer, phenotypes, genotypes, pop_idx, step, row, col):
     phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
 
     # Update cells to be alive if on L=0 (only if current cell is actually alive)
-    # if layer == 0 and phenotypes[pop_idx][step][layer][row][col] != 0:
-
-
-
+    if layer == 0 and phenotypes[pop_idx][step][layer][row][col] != 0:
+        # Spread to nearby cells... is this necessary?
+        # get_spread_update(phenotypes, genotypes, pop_idx, step, row, col)
+        pass
 
 
 # Max registers can be tuned per device. 64 is the most my laptop can handle.
@@ -216,7 +215,7 @@ def simulate(genotypes, layers, phenotypes):
     # Each individual has a genotype that consists of an activation function
     # and a set of neighbor weights for each layer in the hierarchical CA.
     assert genotypes.shape == (pop_size, 3, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS)
-    assert genotypes.dtype == np.uint8
+    # assert genotypes.dtype == np.uint8
 
     # Each individual is configured to have 0, 1, or 2 extra layers. This way,
     # we can simulate individuals from control and experiment in the same
@@ -272,7 +271,7 @@ def make_seed_phenotypes(pop_size):
     # but are represented using arrays of the same size for simplicity.
     phenotypes = np.full(
         (pop_size, NUM_STEPS, NUM_LAYERS, WORLD_SIZE, WORLD_SIZE),
-        DEAD, dtype=np.uint8)
+        DEAD, dtype=np.float32)
 
     # Use a single ALIVE pixel in the middle of the CA world as the initial
     # phenotype state for all individuals in the population.
@@ -285,7 +284,7 @@ def make_seed_phenotypes(pop_size):
 def make_seed_genotypes(pop_size):
     """Starting genotypes: random initialization"""
     # Randomly initialize the NN weights
-    genotypes = np.random.random((pop_size, 3, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS))
+    genotypes = np.random.random((pop_size, 3, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS)).astype(np.float32)
     
     # Mask out the weights of layers 1 and 2
     for l in range(NUM_LAYERS):
@@ -321,23 +320,28 @@ def visualize(phenotype, filename):
         # Scale up the image 4x to make it more visible.
         frame_data = frame_data.repeat(4, 1).repeat(4, 2)
         layer0, layer1, layer2 = frame_data
+        l, w = layer0.shape
+        # print(layer0[l//2-1:l//2+5, w//2-1:w//2+5])
         # Make a composite of layers 1 and 2 to overlay on layer0.
-        overlay = np.array(
-            np.bitwise_or(
-                layer1 * 0xffff0000,  # layer1 in blue
-                layer2 * 0xff00ff00), # layer2 in green
-            dtype=np.uint32)
+        # print(layer1 * 0xffff0000, (layer1 * 0xffff0000).shape)
+        # print(layer2 * 0xff00ff00, (layer2 * 0xff00ff00).shape)
+        # overlay = np.array(
+        #     np.bitwise_or(
+        #         layer1 * 0xffff0000,  # layer1 in blue
+        #         layer2 * 0xff00ff00), # layer2 in green
+        #     dtype=np.uint32)
         # Render layer0 as a black and white image.
-        base = np.array(
-            np.bitwise_or(
-                (layer0 == DEAD) * 0xffffffff,   # DEAD cells are black
-                (layer0 == ALIVE) * 0xff000000), # ALIVE cells are white
-            dtype=np.uint32)
+        # base = np.array(
+        #     np.bitwise_or(
+        #         (layer0 == DEAD) * 0xffffffff,   # DEAD cells are black
+        #         (layer0 != DEAD) * 0xff000000), # ALIVE cells are white
+        #     dtype=np.uint32)
         # Merge the base and overlay images.
-        return Image.blend(
-            Image.fromarray(base, mode='RGBA'),
-            Image.fromarray(overlay, mode='RGBA'),
-            0.3)
+        return Image.fromarray(layer0, mode='RGBA')
+        # return Image.blend(
+        #     Image.fromarray(base, mode='RGBA'),
+        #     Image.fromarray(overlay, mode='RGBA'),
+        #     0.3)
 
     frames = [make_frame(frame_data) for frame_data in phenotype]
     frames[0].save(filename, save_all=True, append_images=frames[1:], loop=0)
@@ -348,7 +352,7 @@ def demo():
     # The number of simulations to run in one batch. This is limited by the
     # available GPU memory, but the bigger this number the more efficient the
     # simulation will be.
-    pop_size = 2500
+    pop_size = 100
 
     # Give every individual in the population the same genotype.
     genotypes = make_seed_genotypes(pop_size)
