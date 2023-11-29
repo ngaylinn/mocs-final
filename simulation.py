@@ -357,7 +357,7 @@ def compute_fitness(phenotypes, target):
     return fitness_scores
 
 
-def visualize(phenotype, filename):
+def visualize(phenotype, filename, layer=0):
     def make_frame(frame_data):
         # Scale up the image 4x to make it more visible.
         # frame_data = frame_data.repeat(4, 1).repeat(4, 2)
@@ -380,7 +380,14 @@ def visualize(phenotype, filename):
             dtype=np.uint32)
         # Merge the base and overlay images.
         # return layer1
-        return Image.fromarray(layer0, mode='RGBA')
+        if layer == 0:
+            return Image.fromarray(layer0, mode='RGBA')
+        elif layer == 1:
+            return Image.fromarray(layer1, mode='RGBA')
+        elif layer == 2:
+            return Image.fromarray(layer2, mode='RGBA') 
+        elif layer == 'base':
+            return Image.fromarray(base, mode='RGBA')
         # return Image.blend(
         #     Image.fromarray(base, mode='RGBA'),
         #     Image.fromarray(overlay, mode='RGBA'),
