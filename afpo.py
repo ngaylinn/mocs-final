@@ -1,16 +1,18 @@
-import pickle
 import copy
+import functools
 import time
 
 import numpy as np
 
 from simulation import simulate, get_layer_mask, DEAD, ALIVE, WORLD_SIZE, NUM_STEPS, NUM_LAYERS, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS
 
+@functools.total_ordering # Sortable by fitness
 class Solution:
     def __init__(self):
         self.age = 0
         self.been_simulated = False
         self.fitness = None
+        self.phenotype = None
         self.randomize_genome()
 
     def make_offspring(self):
@@ -24,19 +26,29 @@ class Solution:
     def set_simulated(self):
         self.been_simulated = True
 
-    def get_fitness(self):
-        return self.fitness
-
     def mutate(self):
         pass
 
     def dominates(self, other):
         return all([self.age < other.age, self.fitness < other.fitness])
 
+    def __eq__(self, other):
+        return all([
+            other is not None,
+            isinstance(other, self.__class__),
+            self.fitness == other.fitness
+        ])
+
+    def __lt__(self, other):
+        return all([
+            other is not None,
+            isinstance(other, self.__class__),
+            self.fitness < other.fitness
+        ])
+
     def randomize_genome(self):
         # Randomly initialize the NN weights (3 layers, input neurons, output neurons)
         self.genotype = np.random.random((3, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS)).astype(np.float32) * 2 - 1
-
 
 
 class AgeFitnessPareto:
@@ -49,6 +61,7 @@ class AgeFitnessPareto:
         self.initialize_population()
         for _ in range(self.max_generations):
             self.evolve_one_generation()
+        return max(self.population)
 
     def evolve_one_generation(self):
         # Increment ages by 1
@@ -112,10 +125,13 @@ class AgeFitnessPareto:
         selects the better (based on a primary objective) of the two for reproduction/mutation
         """
         sol1, sol2 = np.random.choice(self.population, 2, replace=False)
-        return sol1 if sol1.get_fitness() > sol2.get_fitness() else sol2
+        return max(sol1, sol2)
 
     def evaluate_phenotypes(self, phenotypes):
-        pass
+        for sol, phenotype in zip(population, phenotypes):
+            fitness = ... # TODO: Evaluate fitness!
+            sol.fitness = fitness
+            sol.phenotype = phenotype
 
     def get_unsimulated_genotypes(self):
         # Filter out just the genotypes that haven't been simulated yet.
