@@ -108,7 +108,7 @@ class AgeFitnessPareto:
         for i, idx in enumerate(unsimulated_indices):
             self.population[idx].set_fitness(fitness_scores[i])
             self.population[idx].set_simulated(True)
-            self.population[idx].set_phenotype(phenotypes[i])
+            # self.population[idx].set_phenotype(phenotypes[i])
 
         print('Average fitness:',
               np.mean([sol.fitness for sol in self.population]))
@@ -121,6 +121,7 @@ class AgeFitnessPareto:
             sol.increment_age()
         # Extend the population using tournament selection
         self.extend_population()
+
 
     def initialize_population(self):
         # Initialize target_population_size random solutions
@@ -160,11 +161,6 @@ class AgeFitnessPareto:
         sol1, sol2 = np.random.choice(self.population, 2, replace=False)
         return min(sol1, sol2)
 
-    # def evaluate_phenotypes(self, phenotypes):
-    #     for sol, phenotype in zip(population, phenotypes):
-    #         fitness = ... # TODO: Evaluate fitness!
-    #         sol.fitness = fitness
-    #         sol.phenotype = phenotype
 
     def get_unsimulated_genotypes(self):
         # Filter out just the genotypes that haven't been simulated yet.
