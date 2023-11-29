@@ -20,9 +20,15 @@ class Solution:
         child = copy.deepcopy(self)
         child.mutate()
         child.age = 0
+        child.set_simulated(False)
+        child.set_fitness(None)
+        return child
 
     def increment_age(self):
         self.age += 1
+
+    def set_phenotype(self, phenotype):
+        self.phenotype = phenotype
 
     def set_simulated(self, new_simulated):
         self.been_simulated = new_simulated
@@ -51,6 +57,7 @@ class Solution:
         ])
 
     def __lt__(self, other):
+        print(other)
         return all([
             other is not None,
             isinstance(other, self.__class__),
@@ -83,18 +90,12 @@ class AgeFitnessPareto:
         return max(self.population)
 
     def evolve_one_generation(self):
-        # Increment ages by 1
-        for sol in self.population:
-            sol.increment_age()
-        # Extend the population using tournament selection
-        self.extend_population()
-
         # Actually run the simulations, and time how long it takes.
         print(f'Starting {self.target_population_size} simulations...')
         start = time.perf_counter()
 
         init_phenotypes = self.make_seed_phenotypes()
-        unsimulated_genotypes, genotypes_index_to_id = self.get_unsimulated_genotypes()
+        unsimulated_genotypes, unsimulated_indices = self.get_unsimulated_genotypes()
         layers = np.array([2 for _ in range(len(unsimulated_genotypes))], dtype=np.uint8)                 # TODO: handle layers within Solution class and get_unsimulated_genotypes()
         
         ##### SIMULATE ON GPUs #####
@@ -104,23 +105,19 @@ class AgeFitnessPareto:
         lps = self.target_population_size / elapsed
         print(f'Finished in {elapsed:0.2f} seconds ({lps:0.2f} lifetimes per second).')
 
-        # Evaluate the phenotypes
-        self.evaluate_phenotypes(phenotypes)
-
-        # Make sure every individual has been set to simulated
-        for sol in self.population:
-            sol.set_simulated()
-
         fitness_scores = self.evaluate_phenotypes(phenotypes)
         # Set the fitness and simulated flag for each of the just-evaluated solutions
-        for i, sol_id in enumerate(genotypes_index_to_id):
-            self.population[sol_id].set_fitness(fitness_scores[i])
-            self.population[sol_id].set_simulated(True)
+        for i, idx in enumerate(unsimulated_indices):
+            self.population[idx].set_fitness(fitness_scores[i])
+            self.population[idx].set_simulated(True)
+            self.population[idx].set_phenotype(phenotypes[i])
 
         # Reduce the population
         self.reduce_population()
         # Increment ages by 1
-        self.increment_ages()
+        for sol in self.population:
+            sol.increment_age()
+        print(self.population)
         # Extend the population using tournament selection
         self.extend_population()
 
@@ -131,11 +128,14 @@ class AgeFitnessPareto:
         ]
 
     def extend_population(self):
+        new_individuals = []
         # 1 - Breed: do tournament selection
         for _ in range(self.target_population_size):
             # Randomly select an individual using tournament selection
             parent = self.tournament_select()
-            self.population.append(parent.make_offspring())
+            new_individuals.append(parent.make_offspring())
+
+        self.population += new_individuals
 
         # Add a single random individual
         self.population.append(Solution())
@@ -156,6 +156,7 @@ class AgeFitnessPareto:
         selects the better (based on a primary objective) of the two for reproduction/mutation
         """
         sol1, sol2 = np.random.choice(self.population, 2, replace=False)
+        print(sol1, sol2)
         return max(sol1, sol2)
 
     # def evaluate_phenotypes(self, phenotypes):
@@ -169,8 +170,11 @@ class AgeFitnessPareto:
         unsimulated_genotypes = [
             sol.genotype for sol in self.population if not sol.been_simulated
         ]
+        unsimulated_indices = [
+            i for i, sol in enumerate(self.population) if not sol.been_simulated
+        ]
         # Aggregate the genotypes into a single matrix for simulation
-        return np.array(unsimulated_genotypes, dtype=np.float32)
+        return np.array(unsimulated_genotypes, dtype=np.float32), unsimulated_indices
 
 
     def evaluate_phenotypes(self, phenotypes):
@@ -181,8 +185,7 @@ class AgeFitnessPareto:
         # Infer pop_size from phenotypes
         pop_size = phenotypes.shape[0]
         # All phenotypes and the target image are WORLD_SIZE x WORLD_SIZE squares.
-        assert phenotypes.shape == (
-            pop_size, NUM_STEPS, NUM_LAYERS, WORLD_SIZE, WORLD_SIZE)
+        assert phenotypes.shape == (pop_size, NUM_STEPS, NUM_LAYERS, WORLD_SIZE, WORLD_SIZE)
         assert target.shape == (WORLD_SIZE, WORLD_SIZE)
 
         # Allocate space for results.
@@ -196,20 +199,6 @@ class AgeFitnessPareto:
             fitness_scores[i] = np.sum(np.abs(target - (phenotypes[i][-1][0] > 0)))
 
         return fitness_scores
-
-
-    def get_unsimulated_genotypes(self):
-        # Filter out the unsimulated solutions
-        unsimulated_solutions = [self.population[id] for id in self.population if not self.population[id].been_simulated]
-
-        # Aggregate the genotypes into a single matrix for simulation
-        genotypes = np.random.random((len(unsimulated_solutions), 3, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS)).astype(np.float32) * 2 - 1
-        for i, sol in enumerate(unsimulated_solutions):
-            genotypes[i] = sol.genotype
-
-        index_to_id = [sol.id for sol in unsimulated_solutions]
-
-        return genotypes, index_to_id
 
 
     def make_seed_phenotypes(self):
