@@ -251,6 +251,7 @@ def check_granularity(g, image):
 
 def simulate(genotypes, layers, phenotypes):
     """Simulate genotypes and return phenotype videos."""
+
     # Infer population size from genotypes
     pop_size = genotypes.shape[0]
 
@@ -268,6 +269,9 @@ def simulate(genotypes, layers, phenotypes):
     assert layers.shape == (pop_size,)
     assert layers.dtype == np.uint8
     assert all(layer in range(NUM_LAYERS) for layer in layers)
+
+    assert phenotypes.shape == (
+        pop_size, NUM_STEPS, NUM_LAYERS, WORLD_SIZE, WORLD_SIZE)
 
     # Copy input data from host memory to device memory.
     d_phenotypes = cuda.to_device(phenotypes)

@@ -1,4 +1,3 @@
-import copy
 import functools
 import time
 
@@ -14,14 +13,12 @@ class Solution:
         self.been_simulated = False
         self.fitness = None
         self.phenotype = None
-        self.randomize_genome()
+        self.genotype = self.randomize_genome()
 
     def make_offspring(self):
-        child = copy.deepcopy(self)
+        child = Solution()
+        child.genotype = child.genotype.copy()
         child.mutate()
-        child.age = 0
-        child.set_simulated(False)
-        child.set_fitness(None)
         return child
 
     def increment_age(self):
@@ -47,7 +44,7 @@ class Solution:
         self.genotype[random_layer, r, c] = np.random.random() * 2 - 1
 
     def dominates(self, other):
-        return all([self.age < other.age, self.fitness < other.fitness])
+        return all([self.age <= other.age, self.fitness <= other.fitness])
 
     def __eq__(self, other):
         return all([
@@ -57,7 +54,6 @@ class Solution:
         ])
 
     def __lt__(self, other):
-        print(other)
         return all([
             other is not None,
             isinstance(other, self.__class__),
@@ -66,15 +62,16 @@ class Solution:
 
     def randomize_genome(self):
         # Randomly initialize the NN weights (3 layers, input neurons, output neurons)
-        self.genotype = np.random.random((3, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS)).astype(np.float32) * 2 - 1
+        genotype = np.random.random((3, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS)).astype(np.float32) * 2 - 1
         # Mask weights
         for l in range(NUM_LAYERS):
             if l < self.n_layers:
-                self.genotype[l] *= get_layer_mask(l)
+                genotype[l] *= get_layer_mask(l)
             else:
-                self.genotype[l] *= np.zeros(self.genotype[l].shape)
+                genotype[l] *= np.zeros(genotype[l].shape)
         
-        self.total_weights = np.sum(self.genotype != 0)
+        self.total_weights = np.sum(genotype != 0)
+        return genotype
 
 class AgeFitnessPareto:
     def __init__(self, experiment_constants):
@@ -85,13 +82,13 @@ class AgeFitnessPareto:
 
     def evolve(self):
         self.initialize_population()
-        for _ in range(self.max_generations):
+        for generation in range(self.max_generations):
+            print(f'Generation {generation}')
             self.evolve_one_generation()
-        return max(self.population)
+        return min(self.population)
 
     def evolve_one_generation(self):
         # Actually run the simulations, and time how long it takes.
-        print(f'Starting {self.target_population_size} simulations...')
         start = time.perf_counter()
 
         init_phenotypes = self.make_seed_phenotypes()
@@ -99,6 +96,7 @@ class AgeFitnessPareto:
         layers = np.array([2 for _ in range(len(unsimulated_genotypes))], dtype=np.uint8)                 # TODO: handle layers within Solution class and get_unsimulated_genotypes()
         
         ##### SIMULATE ON GPUs #####
+        print(f'Starting {self.target_population_size} simulations...')
         phenotypes = simulate(unsimulated_genotypes, layers, init_phenotypes)
 
         elapsed = time.perf_counter() - start
@@ -112,12 +110,15 @@ class AgeFitnessPareto:
             self.population[idx].set_simulated(True)
             self.population[idx].set_phenotype(phenotypes[i])
 
+        print('Average fitness:',
+              np.mean([sol.fitness for sol in self.population]))
+        print('Average age:',
+              np.mean([sol.age for sol in self.population]))
         # Reduce the population
         self.reduce_population()
         # Increment ages by 1
         for sol in self.population:
             sol.increment_age()
-        print(self.population)
         # Extend the population using tournament selection
         self.extend_population()
 
@@ -130,7 +131,8 @@ class AgeFitnessPareto:
     def extend_population(self):
         new_individuals = []
         # 1 - Breed: do tournament selection
-        for _ in range(self.target_population_size):
+        # The minus one is to make room for one random individual at the end.
+        for _ in range(self.target_population_size - 1):
             # Randomly select an individual using tournament selection
             parent = self.tournament_select()
             new_individuals.append(parent.make_offspring())
@@ -146,9 +148,9 @@ class AgeFitnessPareto:
             sol1, sol2 = np.random.choice(self.population, 2, replace=False)
             # Note that it's possible that NEITHER dominates the other.
             if sol1.dominates(sol2):
-                self.population.remove(sol1)
-            elif sol2.dominates(sol1):
                 self.population.remove(sol2)
+            elif sol2.dominates(sol1):
+                self.population.remove(sol1)
 
     def tournament_select(self):
         """
@@ -156,8 +158,7 @@ class AgeFitnessPareto:
         selects the better (based on a primary objective) of the two for reproduction/mutation
         """
         sol1, sol2 = np.random.choice(self.population, 2, replace=False)
-        print(sol1, sol2)
-        return max(sol1, sol2)
+        return min(sol1, sol2)
 
     # def evaluate_phenotypes(self, phenotypes):
     #     for sol, phenotype in zip(population, phenotypes):
@@ -201,6 +202,7 @@ class AgeFitnessPareto:
         return fitness_scores
 
 
+    @functools.cache
     def make_seed_phenotypes(self):
         """Starting phenotypes to use by default (one ALIVE cell in middle)."""
         # For each inidividual, capture phenotype development over NUM_STEPS. Each
