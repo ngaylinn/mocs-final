@@ -1,3 +1,4 @@
+from pathlib import Path
 
 import numpy as np
 
@@ -11,11 +12,15 @@ experiment_parameters = {
 }
 
 def main():
+    # Delete all the visualizations generated in the last run (if any exist)
+    for file in Path().glob('*.gif'):
+        file.unlink()
+
     # Try running with 0 extra layers (control, traditional CA) or with 2 extra
     # layers (hierarchical CA)
     # TODO: Do we also want to try with and without growth enabled?
-    for layers in (0, 2):
-        label = 'Control' if layers == 0 else 'Experiment'
+    for arm in ('Control', 'Experiment'):
+        layers = 0 if arm == 'Control' else 2
         fitness_scores = []
         # Run a few instances of each
         for trial in range(experiment_parameters['num_trials']):
@@ -29,9 +34,9 @@ def main():
             fitness_scores.append(sol.fitness)
             visualize(
                 sol.phenotype[0], # Save just the first layer
-                f'{label}_t{trial}_f{sol.fitness}.gif')
+                f'{arm}_t{trial}_f{sol.fitness}.gif')
 
-        print(f'Mean fitness for {label}: {np.mean(fitness_scores)}')
+        print(f'Mean fitness for {arm}: {np.mean(fitness_scores)}')
 
 if __name__ == '__main__':
     main()
