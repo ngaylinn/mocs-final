@@ -82,6 +82,8 @@ class AgeFitnessPareto:
         self.population = []
         self.current_generation = 1
 
+        self.best_fitness_history = []
+
     def evolve(self):
         self.initialize_population()
         while self.current_generation <= self.max_generations:
@@ -89,7 +91,7 @@ class AgeFitnessPareto:
             self.evolve_one_generation()
             self.current_generation += 1
 
-        return min([sol for sol in self.population if sol.fitness is not None])
+        return self.best_solution()
 
     def evolve_one_generation(self):
         # Actually run the simulations, and time how long it takes.
@@ -125,6 +127,8 @@ class AgeFitnessPareto:
             sol.increment_age()
         # Extend the population using tournament selection
         self.extend_population()
+
+        self.best_fitness_history.append(self.best_solution())
 
 
     def initialize_population(self):
@@ -227,3 +231,7 @@ class AgeFitnessPareto:
     def pickle_afpo(self, pickle_file_name):
         with open(pickle_file_name, 'wb') as pf:
             pickle.dump(self, pf, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+    def best_solution(self):
+        return min([sol for sol in self.population if sol.fitness is not None])
