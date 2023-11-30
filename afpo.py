@@ -1,5 +1,6 @@
 import functools
 import time
+import pickle
 
 import numpy as np
 
@@ -7,8 +8,8 @@ from simulation import simulate, get_layer_mask, DEAD, ALIVE, WORLD_SIZE, NUM_ST
 
 @functools.total_ordering # Sortable by fitness
 class Solution:
-    def __init__(self):
-        self.n_layers = 3
+    def __init__(self, n_layers=3):
+        self.n_layers = n_layers
         self.age = 0
         self.been_simulated = False
         self.fitness = None
@@ -16,7 +17,7 @@ class Solution:
         self.genotype = self.randomize_genome()
 
     def make_offspring(self):
-        child = Solution()
+        child = Solution(n_layers=self.n_layers)
         child.genotype = child.genotype.copy()
         child.mutate()
         return child
@@ -37,7 +38,7 @@ class Solution:
         return self.fitness
 
     def mutate(self):
-        random_layer = np.random.choice(range(self.n_layers), p=[np.sum(l != 0)/self.total_weights for l in self.genotype])
+        random_layer = np.random.choice(range(NUM_LAYERS), p=[np.sum(l != 0)/self.total_weights for l in self.genotype])
         random_nonzero_indices = np.transpose(np.nonzero(self.genotype[random_layer]))
         r, c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))]
 
@@ -79,13 +80,16 @@ class AgeFitnessPareto:
         self.target_population_size = experiment_constants['target_population_size']
         self.layers = experiment_constants['layers']
         self.population = []
+        self.current_generation = 1
 
     def evolve(self):
         self.initialize_population()
-        for generation in range(self.max_generations):
-            print(f'Generation {generation}')
+        while self.current_generation <= self.max_generations:
+            print(f'Generation {self.current_generation}')
             self.evolve_one_generation()
-        return min(self.population)
+            self.current_generation += 1
+
+        return min([sol for sol in self.population if sol.fitness is not None])
 
     def evolve_one_generation(self):
         # Actually run the simulations, and time how long it takes.
@@ -126,7 +130,7 @@ class AgeFitnessPareto:
     def initialize_population(self):
         # Initialize target_population_size random solutions
         self.population = [
-            Solution() for _ in range(self.target_population_size)
+            Solution(n_layers=self.layers) for _ in range(self.target_population_size)
         ]
 
     def extend_population(self):
@@ -141,7 +145,7 @@ class AgeFitnessPareto:
         self.population += new_individuals
 
         # Add a single random individual
-        self.population.append(Solution())
+        self.population.append(Solution(n_layers=self.layers))
 
     def reduce_population(self):
         # Remove individuals until target population is reached
@@ -198,7 +202,7 @@ class AgeFitnessPareto:
         return fitness_scores
 
 
-    @functools.cache
+    # @functools.cache
     def make_seed_phenotypes(self):
         """Starting phenotypes to use by default (one ALIVE cell in middle)."""
         # For each inidividual, capture phenotype development over NUM_STEPS. Each
@@ -218,3 +222,8 @@ class AgeFitnessPareto:
             phenotypes[i][0][0][middle][middle] = ALIVE
 
         return phenotypes
+
+
+    def pickle_afpo(self, pickle_file_name):
+        with open(pickle_file_name, 'wb') as pf:
+            pickle.dump(self, pf, protocol=pickle.HIGHEST_PROTOCOL)
