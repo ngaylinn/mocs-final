@@ -11,9 +11,10 @@ from simulation import visualize
 
 experiment_parameters = {
     'num_trials': 1,
-    'target_population_size': 500,
-    'max_generations': 2000,
-    'layers': 3
+    'target_population_size': 50,
+    'max_generations': 20,
+    'layers': 3,
+    'use_growth': True,
 }
 
 def main():

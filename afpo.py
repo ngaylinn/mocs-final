@@ -79,6 +79,7 @@ class AgeFitnessPareto:
         self.max_generations = experiment_constants['max_generations']
         self.target_population_size = experiment_constants['target_population_size']
         self.layers = experiment_constants['layers']
+        self.use_growth = experiment_constants['use_growth']
         self.population = []
         self.current_generation = 1
 
@@ -99,11 +100,11 @@ class AgeFitnessPareto:
 
         init_phenotypes = self.make_seed_phenotypes()
         unsimulated_genotypes, unsimulated_indices = self.get_unsimulated_genotypes()
-        layers = np.array([2 for _ in range(len(unsimulated_genotypes))], dtype=np.uint8)                 # TODO: handle layers within Solution class and get_unsimulated_genotypes()
         
         ##### SIMULATE ON GPUs #####
         print(f'Starting {self.target_population_size} simulations...')
-        phenotypes = simulate(unsimulated_genotypes, layers, init_phenotypes)
+        phenotypes = simulate(
+            unsimulated_genotypes, self.layers - 1, self.use_growth, init_phenotypes)
 
         elapsed = time.perf_counter() - start
         lps = self.target_population_size / elapsed

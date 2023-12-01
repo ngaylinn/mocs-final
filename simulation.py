@@ -174,7 +174,7 @@ def get_spread_update(phenotypes, genotypes, pop_idx, step, row, col): # L=0
 
 
 @cuda.jit
-def update_cell(layer, phenotypes, genotypes, pop_idx, step, row, col):
+def update_cell(layer, use_growth, phenotypes, genotypes, pop_idx, step, row, col):
     """Compute the next state for a single cell in layer0 from prev states."""
 
     # Calculate the weighted sum of all neighbors.
@@ -185,7 +185,8 @@ def update_cell(layer, phenotypes, genotypes, pop_idx, step, row, col):
     signal_sum = down_signal_sum + around_signal_sum + up_signal_sum
 
     # Update cells to be alive if on L=0 (only if current cell is actually alive)
-    if layer == 0 and phenotypes[pop_idx][step][layer][row][col] != 0:
+    alive = phenotypes[pop_idx][step][layer][row][col] != 0
+    if layer == 0 and alive and use_growth:
         # Spread to nearby cells... is this necessary?
         (left, right, up, down) = get_spread_update(phenotypes, genotypes, pop_idx, step, row, col)
                 
@@ -204,7 +205,7 @@ def update_cell(layer, phenotypes, genotypes, pop_idx, step, row, col):
 
 # Max registers can be tuned per device. 64 is the most my laptop can handle.
 @cuda.jit(max_registers=64)
-def simulation_kernel(genotypes, layers, phenotypes):
+def simulation_kernel(genotypes, phenotypes, num_layers, use_growth):
     """Compute and record the full development process of a population."""
     # Compute indices for this thread.
     pop_idx = cuda.blockIdx.x
@@ -218,8 +219,8 @@ def simulation_kernel(genotypes, layers, phenotypes):
         # starting at start_col.
         for col in range(start_col, start_col + COLS_PER_THREAD):
             # Update the state in every layer this individual uses.
-            for layer in range(0, layers[pop_idx] + 1):
-                update_cell(layer, phenotypes, genotypes, pop_idx, step, row, col)
+            for layer in range(0, num_layers + 1):
+                update_cell(layer, use_growth, phenotypes, genotypes, pop_idx, step, row, col)
         # Make sure all threads have finished computing this step before going
         # on to the next one.
         cuda.syncthreads()
@@ -247,7 +248,7 @@ def check_granularity(g, image):
     return np.array_equal(image, scaled_up)
 
 
-def simulate(genotypes, layers, phenotypes):
+def simulate(genotypes, num_layers, use_growth, phenotypes):
     """Simulate genotypes and return phenotype videos."""
 
     # Infer population size from genotypes
@@ -264,9 +265,10 @@ def simulate(genotypes, layers, phenotypes):
     # hurt performance, but shouldn't because each individual is handled by
     # MAX_THREADS_PER_BLOCK threads, which should mean that whole warps fall
     # out of the computation together.
-    assert layers.shape == (pop_size,)
-    assert layers.dtype == np.uint8
-    assert all(layer in range(NUM_LAYERS) for layer in layers)
+    assert type(num_layers) is int
+    assert num_layers in range(NUM_LAYERS)
+
+    assert type(use_growth) is bool
 
     assert phenotypes.shape == (
         pop_size, NUM_STEPS, NUM_LAYERS, WORLD_SIZE, WORLD_SIZE)
@@ -274,7 +276,6 @@ def simulate(genotypes, layers, phenotypes):
     # Copy input data from host memory to device memory.
     d_phenotypes = cuda.to_device(phenotypes)
     d_genotypes = cuda.to_device(genotypes)
-    d_layers = cuda.to_device(layers)
 
     # Actually run the simulation for all individuals in parallel on the GPU.
     simulation_kernel[
@@ -285,7 +286,7 @@ def simulate(genotypes, layers, phenotypes):
         # the CA world to compute, and the Y dimension is multiplied by
         # COLS_PER_THREAD to find the first column to start from.
         (WORLD_SIZE, COL_BATCH_SIZE)
-    ](d_genotypes, d_layers, d_phenotypes)
+    ](d_genotypes, d_phenotypes, num_layers, use_growth)
 
     # Copy output data from device memory to host memory.
     phenotypes = d_phenotypes.copy_to_host()
@@ -402,47 +403,3 @@ def visualize(phenotype, filename, layer=0):
     # plt.show()
     
     frames[0].save(filename, save_all=True, append_images=frames[1:], loop=0, duration=10)
-
-
-def demo():
-    """Run a simple demo to sanity check the code above."""
-    # The number of simulations to run in one batch. This is limited by the
-    # available GPU memory, but the bigger this number the more efficient the
-    # simulation will be.
-    pop_size = 700
-
-    # Give every individual in the population the same genotype.
-    genotypes = make_seed_genotypes(pop_size)
-
-    # Generate a mix of simulations with 0, 1, or 2 layers.
-    # Pattern is: 0, 1, 2, 0, 1, 2, 0, 1, 2, ...
-    layers = np.zeros(pop_size, dtype=np.uint8)
-    layers[1:3] = 1
-    layers[2:3] = 2
-
-    phenotypes = make_seed_phenotypes(pop_size)
-
-
-
-    # Actually run the simulations, and time how long it takes.
-    print(f'Starting {pop_size} simulations...')
-    start = time.perf_counter()
-    phenotypes = simulate(genotypes, layers, phenotypes)
-    elapsed = time.perf_counter() - start
-    lps = pop_size / elapsed
-    print(f'Finished in {elapsed:0.2f} seconds '
-          f'({lps:0.2f} lifetimes per second).')
-
-    # Compute fitness just to run the function through its paces. The target is
-    # random, so the result is meaningless.
-    target = np.random.choice((DEAD, ALIVE), (WORLD_SIZE, WORLD_SIZE))
-    compute_fitness(phenotypes, target)
-
-    # Output a gif video of the demo simulation with 0, 1, and 2 layers.
-    visualize(phenotypes[0], 'demo0.gif')
-    visualize(phenotypes[1], 'demo1.gif')
-    visualize(phenotypes[2], 'demo2.gif')
-
-
-if __name__ == '__main__':
-    demo()
