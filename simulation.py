@@ -176,8 +176,6 @@ def get_spread_update(phenotypes, genotypes, pop_idx, step, row, col): # L=0
 @cuda.jit
 def update_cell(layer, phenotypes, genotypes, pop_idx, step, row, col):
     """Compute the next state for a single cell in layer0 from prev states."""
-#    if phenotypes[pop_idx][step][layer][row][col] == 0:
-#         return 
 
     # Calculate the weighted sum of all neighbors.
     down_signal_sum = look_down(layer, phenotypes, genotypes, pop_idx, step, row, col) # Should return 0 for L=0
@@ -186,22 +184,22 @@ def update_cell(layer, phenotypes, genotypes, pop_idx, step, row, col):
 
     signal_sum = down_signal_sum + around_signal_sum + up_signal_sum
 
-    # Actually update the phenotype state for step on layer1 at (row, col).
-    phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
-
     # Update cells to be alive if on L=0 (only if current cell is actually alive)
     if layer == 0 and phenotypes[pop_idx][step][layer][row][col] != 0:
         # Spread to nearby cells... is this necessary?
         (left, right, up, down) = get_spread_update(phenotypes, genotypes, pop_idx, step, row, col)
-        
+                
         if left:
-            phenotypes[pop_idx][step][layer][(row % WORLD_SIZE)][((col-1) % WORLD_SIZE)] = 0.5
+            phenotypes[pop_idx][step][layer][(row % WORLD_SIZE)][((col-1) % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
         if right:
-            phenotypes[pop_idx][step][layer][(row % WORLD_SIZE)][((col+1) % WORLD_SIZE)] = 0.5
+            phenotypes[pop_idx][step][layer][(row % WORLD_SIZE)][((col+1) % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
         if up:
-            phenotypes[pop_idx][step][layer][((row-1) % WORLD_SIZE)][(col % WORLD_SIZE)] = 0.5
+            phenotypes[pop_idx][step][layer][((row-1) % WORLD_SIZE)][(col % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
         if down:
-            phenotypes[pop_idx][step][layer][((row+1) % WORLD_SIZE)][(col % WORLD_SIZE)] = 0.5
+            phenotypes[pop_idx][step][layer][((row+1) % WORLD_SIZE)][(col % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
+
+    # Actually update the phenotype state for step on layer1 at (row, col).
+    phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
         
 
 # Max registers can be tuned per device. 64 is the most my laptop can handle.
