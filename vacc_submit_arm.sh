@@ -10,5 +10,4 @@
 
 set -x
 
-echo "$1" "$2"
-python3 run_exp_vacc.py "$1" "$2"
+python3 run_trial.py "$1" "$2" "$3" "$4"
