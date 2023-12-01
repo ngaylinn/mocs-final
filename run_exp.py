@@ -37,22 +37,14 @@ def main():
         if not os.path.exists(f'./experiments/{args.name}/{arm}'):
             os.system(f'mkdir ./experiments/{args.name}/{arm}')
 
-        fitness_scores = []
-        arm_parameters = exp_arms[arm]
         # Run a few instances of each
-        for trial in range(arm_parameters['num_trials']):
-            # TODO: It would be more efficient to run all trials for both
-            # experiment and control in one batch, but that would also take
-            # some non-trivial refactoring. We should add that optimization
-            # only if necessary.
+        n_trials = arm_parameters['num_trials']
+        for trial in range(n_trials):
+            print(f'==== Arm {arm}: Trial {trial}/{n_trials} ====')
             single_run = AgeFitnessPareto(arm_parameters)
             best = single_run.evolve()
 
-            single_run.pickle_afpo(f'./experiments/{args.name}/{arm}/{arm}_t{trial}.pkl')
-
-            fitness_scores.append(best.fitness)
-
-        print(f'Mean fitness for {arm}: {np.mean(fitness_scores)}')
+            single_run.pickle_afpo(f'./experiments/{args.name}/{arm}/{arm}_t{args.trial}.pkl')
 
 if __name__ == '__main__':
     main()
