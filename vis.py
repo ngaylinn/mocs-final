@@ -54,6 +54,40 @@ def visualize_all_layers(phenotype, filename):
     frames[0].save(filename, save_all=True, append_images=frames[1:], loop=0, duration=10)
 
 
+def visualize_frames(phenotype, filename, n_frames=4, layer=0):
+    def make_image(frames, n_frames, layer):
+        l, w = frames[0][0].shape
+
+        # Calculate the total width for the new image
+        total_width = w * n_frames
+
+        # Create a new image with the calculated total width
+        combined_image = Image.new('RGBA', (total_width, l))
+
+        for f in range(n_frames):
+            layer0, layer1, layer2 = frames[f]
+            l, w = layer0.shape
+
+            if layer == 'base':
+                base = np.array(
+                np.bitwise_or(
+                    (layer0 != DEAD) * 0xffffffff,   # DEAD cells are black
+                    (layer0 == DEAD) * 0xff000000), # ALIVE cells are white
+                dtype=np.uint32)
+                img = Image.fromarray(base, mode='RGBA')
+            else:
+                img = Image.fromarray(frames[f][layer], mode='RGBA')
+
+            combined_image.paste(img, (w*f, 0))
+
+        return combined_image
+
+    img = make_image(phenotype, n_frames, layer)
+    
+    img.save(filename)
+
+
+
 def visualize_one_layer(phenotype, filename, layer=0):
     def make_frame(frame_data):
         # Scale up the image 4x to make it more visible.
@@ -84,8 +118,8 @@ def visualize_one_layer(phenotype, filename, layer=0):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('exp', type=str)
-options = parser.parse_args()
+parser.add_argument('--exp', type=str, default=None)
+args = parser.parse_args()
 
 experiment_pkl = args.exp
 
@@ -95,4 +129,4 @@ if __name__ == '__main__':
         exp = pickle.load(pf)
 
     exp_best_phenotype = simulate_one_individual(exp.best_solution())
-    visualize_all_layers(exp_best_phenotype, 'exp_best_all_layers.gif')
+    visualize_all_layers(exp_best_phenotype, 'control_best_all_layers_1.gif')
