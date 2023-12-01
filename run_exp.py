@@ -12,8 +12,8 @@ from simulation import visualize
 
 # Parse command line arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('--exp_file', required=True, type=str, help='Experiment file')
-parser.add_argument('--name', required=True, type=str, help='Name of experiment')
+parser.add_argument('exp_file', required=True, type=str, help='Experiment file')
+parser.add_argument('name', required=True, type=str, help='Name of experiment')
 args = parser.parse_args()
 
 # Read the experiment file into exp_arms variable
@@ -37,14 +37,16 @@ def main():
         if not os.path.exists(f'./experiments/{args.name}/{arm}'):
             os.system(f'mkdir ./experiments/{args.name}/{arm}')
 
+        arm_parameters = exp_arms[arm]
+
         # Run a few instances of each
         n_trials = arm_parameters['num_trials']
         for trial in range(n_trials):
-            print(f'==== Arm {arm}: Trial {trial}/{n_trials} ====')
+            print(f'==== Arm {arm}: Trial {trial+1}/{n_trials} ====')
             single_run = AgeFitnessPareto(arm_parameters)
             best = single_run.evolve()
 
-            single_run.pickle_afpo(f'./experiments/{args.name}/{arm}/{arm}_t{args.trial}.pkl')
+            single_run.pickle_afpo(f'./experiments/{args.name}/{arm}/{arm}_t{trial}.pkl')
 
 if __name__ == '__main__':
     main()
