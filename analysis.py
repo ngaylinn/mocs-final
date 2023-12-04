@@ -22,14 +22,14 @@ def plot_average_fitness(folders):
             file_path = os.path.join(folder_name, file_name)
             fitness_values = extract_fitness_values(file_path)
             all_fitness_values.append(fitness_values)
-        fitness_groups = list(zip(*all_fitness_values))                                                     # List of tuples where each tuple contains fitness values of its respective generation    
-        average_fitness = [sum(fitnesses) / len(fitness_groups) for fitnesses in fitness_groups]            # Calculate the average fitness for each generation
+        fitness_groups = list(zip(*all_fitness_values))                                                              # List of tuples where each tuple contains fitness values of its respective generation  
+        average_fitnesses = [sum(fitness_group) / len(fitness_group) for fitness_group in fitness_groups]            # Calculate the average fitness for each generation
         label_name = folder_name.split('/', 2)[2]
-        plt.plot(average_fitness, label=label_name)
+        plt.plot(average_fitnesses, label=label_name)
     plt.xlabel('Generation')
     plt.ylabel('Average Fitness')
     plt.legend()
-    plt.title('Fitness Curve Comparison between Contrlo and Experiment')
+    plt.title('Fitness Curve Comparison between Control and Experiment')
     plt.show()
 
 
