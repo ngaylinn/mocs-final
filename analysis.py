@@ -24,7 +24,7 @@ def plot_average_fitness(folders):
             all_fitness_values.append(fitness_values)
         fitness_groups = list(zip(*all_fitness_values))                                                     # List of tuples where each tuple contains fitness values of its respective generation    
         average_fitness = [sum(fitnesses) / len(fitness_groups) for fitnesses in fitness_groups]            # Calculate the average fitness for each generation
-        label_name = folder_name
+        label_name = folder_name.split('/', 2)[2]
         plt.plot(average_fitness, label=label_name)
     plt.xlabel('Generation')
     plt.ylabel('Average Fitness')
@@ -43,7 +43,8 @@ def box_plot(folders):
             fitness_values = extract_fitness_values(file_path)
             max_fit_list.append(fitness_values[-1])
         all_max_fit_values.append(max_fit_list)
-    plt.boxplot(all_max_fit_values, labels=folders)
+    label_names = [folder.split('/', 2)[2] for folder in folders]
+    plt.boxplot(all_max_fit_values, labels=label_names)
     plt.ylabel('Maximum Fitness')
     plt.title('Maximum Fitness Comparison between Control and Experiment')
     plt.show()
@@ -51,7 +52,7 @@ def box_plot(folders):
 
 
 # Example usage of fitness_curve function:
-folders = ['Control', 'Experiment']
+folders = ['experiments/one_layer/Control', 'experiments/one_layer/Experiment']
 plot_average_fitness(folders)
 
 # Example usage of box_lot
