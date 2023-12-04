@@ -58,7 +58,7 @@ def box_plot(folders, label_names):
     plt.boxplot(all_max_fit_values, labels=label_names)
     plt.ylabel('Maximum Fitness')
     # plt.title('Maximum Fitness Comparison between Control and Experiment')
-    print(folders[0].split('/')[1])
+    # print(folders[0].split('/')[1])
     plt.savefig(f'box_plot_{label_names[0]}_vs_{label_names[1]}.png')
     plt.show()
 
@@ -68,6 +68,7 @@ def box_plot(folders, label_names):
 # Define datasets
 layers_3_growth_true = 'experiments/growth-exp/Control'
 layers_3_growth_false = 'experiments/growth-exp/Experiment'
+
 layers_1_growth_true = 'experiments/one_layer/Experiment'
 layers_1_growth_false = 'experiments/one_layer/Control'
 
@@ -76,8 +77,8 @@ plot_average_fitness([layers_3_growth_true, layers_1_growth_true], ['3 Layers, G
 box_plot([layers_3_growth_true, layers_1_growth_true], ['3 Layers, Growth', '1 Layer, Growth'])
 
 # (3 Layers, No Growth) vs (3 Layers, No Growth)
-plot_average_fitness([layers_3_growth_true, layers_1_growth_true], ['3 Layers, No Growth', '1 Layer, No Growth'])
-box_plot([layers_3_growth_true, layers_1_growth_true], ['3 Layers, No Growth', '1 Layer, No Growth'])
+plot_average_fitness([layers_3_growth_false, layers_1_growth_false], ['3 Layers, No Growth', '1 Layer, No Growth'])
+box_plot([layers_3_growth_false, layers_1_growth_false], ['3 Layers, No Growth', '1 Layer, No Growth'])
 
 
 # (3 Layers, No Growth) vs (1 Layer, No Growth)
