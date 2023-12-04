@@ -39,6 +39,8 @@ def plot_average_fitness(folders):
     plt.ylabel('Average Fitness')
     plt.legend()
     plt.title('Fitness Curve Comparison between Control and Experiment')
+    # print(folders[0].split('/')[1])
+    plt.savefig(f'fitness_curve_{folders[0].split('/')[1]}.png')
     plt.show()
 
 
@@ -56,13 +58,22 @@ def box_plot(folders):
     plt.boxplot(all_max_fit_values, labels=label_names)
     plt.ylabel('Maximum Fitness')
     plt.title('Maximum Fitness Comparison between Control and Experiment')
+    print(folders[0].split('/')[1])
+    plt.savefig(f'box_plot_{folders[0].split('/')[1]}.png')
     plt.show()
 
 
 
-# Example usage of fitness_curve function:
-folders = ['experiments/one_layer/Control', 'experiments/one_layer/Experiment']
-plot_average_fitness(folders)
 
-# Example usage of box_lot
-box_plot(folders)
+# Generate figures for each dataset
+experiment_folders = [['experiments/growth-exp/Control', 'experiments/growth-exp/Experiment'], 
+['experiments/one_layer/Control', 'experiments/one_layer/Experiment']]
+# ['experiments/two_layers/Control', 'experiments/two_layers/Experiment'],
+
+for experiment in experiment_folders:
+    plot_average_fitness(experiment)
+    box_plot(experiment)
+
+
+
+
