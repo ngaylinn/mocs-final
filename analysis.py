@@ -36,9 +36,8 @@ def plot_average_fitness(folders, label_names):
 
     plt.xlabel('Generation')
     plt.ylabel('Average Fitness')
+    plt.ylim(250,1050)
     plt.legend()
-    # plt.title('Fitness Curve Comparison between Control and Experiment')
-    # print(folders[0].split('/')[1])
     plt.savefig(f'fitness_curve_{label_names[0]}_vs_{label_names[1]}.png')
     plt.show()
 
@@ -56,8 +55,7 @@ def box_plot(folders, label_names):
     
     plt.boxplot(all_max_fit_values, labels=label_names)
     plt.ylabel('Maximum Fitness')
-    # plt.title('Maximum Fitness Comparison between Control and Experiment')
-    # print(folders[0].split('/')[1])
+    plt.ylim(250,1050)
     plt.savefig(f'box_plot_{label_names[0]}_vs_{label_names[1]}.png')
     plt.show()
 
