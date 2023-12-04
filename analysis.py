@@ -1,6 +1,7 @@
 import os
 import pickle
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 
@@ -22,10 +23,18 @@ def plot_average_fitness(folders):
             file_path = os.path.join(folder_name, file_name)
             fitness_values = extract_fitness_values(file_path)
             all_fitness_values.append(fitness_values)
-        fitness_groups = list(zip(*all_fitness_values))                                                              # List of tuples where each tuple contains fitness values of its respective generation  
-        average_fitnesses = [sum(fitness_group) / len(fitness_group) for fitness_group in fitness_groups]            # Calculate the average fitness for each generation
+
+        # List of tuples where each tuple contains fitness values of its respective generation. Calculate average fitness of each tuple
+        fitness_groups = list(zip(*all_fitness_values))                                                             
+        average_fitnesses = [sum(fitness_group) / len(fitness_group) for fitness_group in fitness_groups]           
         label_name = folder_name.split('/', 2)[2]
         plt.plot(average_fitnesses, label=label_name)
+
+        # Fill 95% confidence interval
+        confidence_interval = 1.96 * np.std(all_fitness_values, axis=0) / np.sqrt(len(all_fitness_values))
+        generations = range(len(average_fitnesses))
+        plt.fill_between(generations, average_fitnesses - confidence_interval, average_fitnesses + confidence_interval, alpha=0.2)
+
     plt.xlabel('Generation')
     plt.ylabel('Average Fitness')
     plt.legend()
