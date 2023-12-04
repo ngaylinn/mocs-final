@@ -1,0 +1,10 @@
+{
+'Two_Layers': 
+  {
+    'num_trials': 5,
+    'target_population_size': 500,
+    'max_generations': 2000,
+    'layers': 2,
+    'use_growth': True
+  }
+}
