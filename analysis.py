@@ -15,11 +15,11 @@ def extract_fitness_values(file_path):
     return fitness_values
 
 
-def plot_average_fitness(folders):
-    for folder_name in folders:
+def plot_average_fitness(folders, label_names):
+    for i, folder_name in enumerate(folders):                                                # enumerate to get index for label_names
         all_fitness_values = []
         file_list = [f for f in os.listdir(folder_name) if f.endswith('.pkl')]
-        for file_name in file_list:
+        for file_name in file_list:                                   
             file_path = os.path.join(folder_name, file_name)
             fitness_values = extract_fitness_values(file_path)
             all_fitness_values.append(fitness_values)
@@ -27,8 +27,8 @@ def plot_average_fitness(folders):
         # List of tuples where each tuple contains fitness values of its respective generation. Calculate average fitness of each tuple
         fitness_groups = list(zip(*all_fitness_values))                                                             
         average_fitnesses = [sum(fitness_group) / len(fitness_group) for fitness_group in fitness_groups]           
-        label_name = folder_name.split('/', 2)[2]
-        plt.plot(average_fitnesses, label=label_name)
+        
+        plt.plot(average_fitnesses, label=label_names[i])
 
         # Fill 95% confidence interval
         confidence_interval = 1.96 * np.std(all_fitness_values, axis=0) / np.sqrt(len(all_fitness_values))
@@ -38,13 +38,13 @@ def plot_average_fitness(folders):
     plt.xlabel('Generation')
     plt.ylabel('Average Fitness')
     plt.legend()
-    plt.title('Fitness Curve Comparison between Control and Experiment')
+    # plt.title('Fitness Curve Comparison between Control and Experiment')
     # print(folders[0].split('/')[1])
-    plt.savefig(f'fitness_curve_{folders[0].split('/')[1]}.png')
+    plt.savefig(f'fitness_curve_{label_names[0]}_vs_{label_names[1]}.png')
     plt.show()
 
 
-def box_plot(folders):
+def box_plot(folders, label_names):
     all_max_fit_values = []
     for folder_name in folders:
         max_fit_list = []
@@ -54,25 +54,41 @@ def box_plot(folders):
             fitness_values = extract_fitness_values(file_path)
             max_fit_list.append(fitness_values[-1])
         all_max_fit_values.append(max_fit_list)
-    label_names = [folder.split('/', 2)[2] for folder in folders]
+    
     plt.boxplot(all_max_fit_values, labels=label_names)
     plt.ylabel('Maximum Fitness')
-    plt.title('Maximum Fitness Comparison between Control and Experiment')
+    # plt.title('Maximum Fitness Comparison between Control and Experiment')
     print(folders[0].split('/')[1])
-    plt.savefig(f'box_plot_{folders[0].split('/')[1]}.png')
+    plt.savefig(f'box_plot_{label_names[0]}_vs_{label_names[1]}.png')
     plt.show()
 
 
 
 
-# Generate figures for each dataset
-experiment_folders = [['experiments/growth-exp/Control', 'experiments/growth-exp/Experiment'], 
-['experiments/one_layer/Control', 'experiments/one_layer/Experiment']]
-# ['experiments/two_layers/Control', 'experiments/two_layers/Experiment'],
+# Define datasets
+layers_3_growth_true = 'experiments/growth-exp/Control'
+layers_3_growth_false = 'experiments/growth-exp/Experiment'
+layers_1_growth_true = 'experiments/one_layer/Experiment'
+layers_1_growth_false = 'experiments/one_layer/Control'
 
-for experiment in experiment_folders:
-    plot_average_fitness(experiment)
-    box_plot(experiment)
+# (3 Layers, Growth) vs (1 Layer, Growth)
+plot_average_fitness([layers_3_growth_true, layers_1_growth_true], ['3 Layers, Growth', '1 Layer, Growth'])
+box_plot([layers_3_growth_true, layers_1_growth_true], ['3 Layers, Growth', '1 Layer, Growth'])
+
+# (3 Layers, No Growth) vs (3 Layers, No Growth)
+plot_average_fitness([layers_3_growth_true, layers_1_growth_true], ['3 Layers, Growth', '1 Layer, Growth'])
+box_plot([layers_3_growth_true, layers_1_growth_true], ['3 Layers, Growth', '1 Layer, Growth'])
+
+
+# (3 Layers, No Growth) vs (1 Layer, No Growth)
+
+
+# (1 Layers, No Growth) vs (1 Layers, No Growth)
+
+
+
+
+
 
 
 
