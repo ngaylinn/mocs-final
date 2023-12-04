@@ -27,7 +27,6 @@ def plot_average_fitness(folders, label_names):
         # List of tuples where each tuple contains fitness values of its respective generation. Calculate average fitness of each tuple
         fitness_groups = list(zip(*all_fitness_values))                                                             
         average_fitnesses = [sum(fitness_group) / len(fitness_group) for fitness_group in fitness_groups]           
-        
         plt.plot(average_fitnesses, label=label_names[i])
 
         # Fill 95% confidence interval
@@ -69,22 +68,20 @@ def box_plot(folders, label_names):
 layers_3_growth_true = 'experiments/growth-exp/Control'
 layers_3_growth_false = 'experiments/growth-exp/Experiment'
 
+layers_2_growth_true = 'experiments/two_layers/Two_Layers'
+
 layers_1_growth_true = 'experiments/one_layer/Experiment'
 layers_1_growth_false = 'experiments/one_layer/Control'
 
-# (3 Layers, Growth) vs (1 Layer, Growth)
-plot_average_fitness([layers_3_growth_true, layers_1_growth_true], ['3 Layers, Growth', '1 Layer, Growth'])
-box_plot([layers_3_growth_true, layers_1_growth_true], ['3 Layers, Growth', '1 Layer, Growth'])
+# (3 Layers, Growth) vs (2 Layers, Growth) vs (1 Layer, Growth) 
+plot_average_fitness([layers_3_growth_true, layers_2_growth_true, layers_1_growth_true], ['3 Layers, Growth', '2 Layers, Growth','1 Layer, Growth'])
+box_plot([layers_3_growth_true, layers_2_growth_true, layers_1_growth_true], ['3 Layers, Growth', '2 Layers, Growth','1 Layer, Growth'])
 
 # (3 Layers, No Growth) vs (3 Layers, No Growth)
 plot_average_fitness([layers_3_growth_false, layers_1_growth_false], ['3 Layers, No Growth', '1 Layer, No Growth'])
 box_plot([layers_3_growth_false, layers_1_growth_false], ['3 Layers, No Growth', '1 Layer, No Growth'])
 
 
-# (3 Layers, No Growth) vs (1 Layer, No Growth)
-
-
-# (1 Layers, No Growth) vs (1 Layers, No Growth)
 
 
 
