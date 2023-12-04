@@ -76,8 +76,8 @@ plot_average_fitness([layers_3_growth_true, layers_1_growth_true], ['3 Layers, G
 box_plot([layers_3_growth_true, layers_1_growth_true], ['3 Layers, Growth', '1 Layer, Growth'])
 
 # (3 Layers, No Growth) vs (3 Layers, No Growth)
-plot_average_fitness([layers_3_growth_true, layers_1_growth_true], ['3 Layers, Growth', '1 Layer, Growth'])
-box_plot([layers_3_growth_true, layers_1_growth_true], ['3 Layers, Growth', '1 Layer, Growth'])
+plot_average_fitness([layers_3_growth_true, layers_1_growth_true], ['3 Layers, No Growth', '1 Layer, No Growth'])
+box_plot([layers_3_growth_true, layers_1_growth_true], ['3 Layers, No Growth', '1 Layer, No Growth'])
 
 
 # (3 Layers, No Growth) vs (1 Layer, No Growth)
