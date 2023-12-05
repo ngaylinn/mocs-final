@@ -60,7 +60,7 @@ def strip_plot(folders, label_names):
     ax.set_xticklabels(label_names)
     plt.ylabel('Maximum Fitness')
     plt.ylim(250, 1050)
-    plt.savefig(f'box_plot_{label_names[0]}_vs_{label_names[1]}.png')
+    plt.savefig(f'strip_plot_{label_names[0]}_vs_{label_names[1]}.png')
     plt.show()
 
 
