@@ -2,6 +2,7 @@ import os
 import pickle
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 
 
 
@@ -42,6 +43,27 @@ def plot_average_fitness(folders, label_names):
     plt.show()
 
 
+def strip_plot(folders, label_names):
+    np.random.seed(0)                                                               # Set random seed for jitter
+    all_max_fit_values = []
+    for i, folder_name in enumerate(folders):
+        max_fit_list = []
+        file_list = [f for f in os.listdir(folder_name) if f.endswith('.pkl')]
+        for file_name in file_list:
+            file_path = os.path.join(folder_name, file_name)
+            fitness_values = extract_fitness_values(file_path)
+            max_fit_list.append(fitness_values[-1])
+        all_max_fit_values.append(max_fit_list)
+
+    ax = sns.stripplot(data=all_max_fit_values, jitter=True) #alpha = 0.5
+    ax.set_xticks(np.arange(len(label_names)))                                     # Set x-ticks using label_names
+    ax.set_xticklabels(label_names)
+    plt.ylabel('Maximum Fitness')
+    plt.ylim(250, 1050)
+    plt.savefig(f'box_plot_{label_names[0]}_vs_{label_names[1]}.png')
+    plt.show()
+
+
 def box_plot(folders, label_names):
     all_max_fit_values = []
     for folder_name in folders:
@@ -60,8 +82,6 @@ def box_plot(folders, label_names):
     plt.show()
 
 
-
-
 # Define datasets
 layers_3_growth_true = 'experiments/growth-exp/Control'
 layers_3_growth_false = 'experiments/growth-exp/Experiment'
@@ -74,10 +94,12 @@ layers_1_growth_false = 'experiments/one_layer/Control'
 # (3 Layers, Growth) vs (2 Layers, Growth) vs (1 Layer, Growth) 
 plot_average_fitness([layers_3_growth_true, layers_2_growth_true, layers_1_growth_true], ['3 Layers, Growth', '2 Layers, Growth','1 Layer, Growth'])
 box_plot([layers_3_growth_true, layers_2_growth_true, layers_1_growth_true], ['3 Layers, Growth', '2 Layers, Growth','1 Layer, Growth'])
+strip_plot([layers_3_growth_true, layers_2_growth_true, layers_1_growth_true], ['3 Layers, Growth', '2 Layers, Growth','1 Layer, Growth'])
 
 # (3 Layers, No Growth) vs (3 Layers, No Growth)
 plot_average_fitness([layers_3_growth_false, layers_1_growth_false], ['3 Layers, No Growth', '1 Layer, No Growth'])
 box_plot([layers_3_growth_false, layers_1_growth_false], ['3 Layers, No Growth', '1 Layer, No Growth'])
+strip_plot([layers_3_growth_false, layers_1_growth_false], ['3 Layers, No Growth', '1 Layer, No Growth'])
 
 
 
