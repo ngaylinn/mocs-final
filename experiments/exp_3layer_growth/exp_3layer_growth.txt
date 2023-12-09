@@ -1,0 +1,10 @@
+{
+'experiment':
+  {
+    'num_trials': 15,
+    'target_population_size': 500,
+    'max_generations': 2000,
+    'layers': 3,
+    'use_growth': True
+  }
+}
