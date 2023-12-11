@@ -100,20 +100,27 @@ layers_2_growth_true = 'experiments/two_layers/Two_Layers'
 layers_1_growth_true = 'experiments/one_layer/Experiment'
 layers_1_growth_false = 'experiments/one_layer/Control'
 
+layers_1_growth = 'experiments/exp_1layer_growth/experiment'
+layers_2_growth = 'experiments/exp_2layer_growth/experiment'
+layers_3_growth = 'experiments/exp_3layer_growth/experiment'
+
+plot_average_fitness([layers_3_growth, layers_2_growth, layers_1_growth], ['3 Layers, Growth', '2 Layers, Growth','1 Layer, Growth'])
+strip_plot([layers_3_growth, layers_2_growth, layers_1_growth], ['3 Layers \n Growth', '2 Layers \n Growth','1 Layer \n Growth'])
+
 # (3 Layers, Growth) vs (2 Layers, Growth) vs (1 Layer, Growth) 
-plot_average_fitness([layers_3_growth_true, layers_2_growth_true, layers_1_growth_true], ['3 Layers, Growth', '2 Layers, Growth','1 Layer, Growth'])
-box_plot([layers_3_growth_true, layers_2_growth_true, layers_1_growth_true], ['3 Layers \n Growth', '2 Layers \n Growth','1 Layer \n Growth'])
-strip_plot([layers_3_growth_true, layers_2_growth_true, layers_1_growth_true], ['3 Layers \n Growth', '2 Layers \n Growth','1 Layer \n Growth'])
+# plot_average_fitness([layers_3_growth_true, layers_2_growth_true, layers_1_growth_true], ['3 Layers, Growth', '2 Layers, Growth','1 Layer, Growth'])
+# box_plot([layers_3_growth_true, layers_2_growth_true, layers_1_growth_true], ['3 Layers \n Growth', '2 Layers \n Growth','1 Layer \n Growth'])
+# strip_plot([layers_3_growth_true, layers_2_growth_true, layers_1_growth_true], ['3 Layers \n Growth', '2 Layers \n Growth','1 Layer \n Growth'])
 
 # (3 Layers, No Growth) vs (3 Layers, No Growth)
-plot_average_fitness([layers_3_growth_false, layers_1_growth_false], ['3 Layers, No Growth', '1 Layer, No Growth'])
-box_plot([layers_3_growth_false, layers_1_growth_false], ['3 Layers \n No Growth', '1 Layer \n No Growth'])
-strip_plot([layers_3_growth_false, layers_1_growth_false], ['3 Layers \n No Growth', '1 Layer \n No Growth'])
+# plot_average_fitness([layers_3_growth_false, layers_1_growth_false], ['3 Layers, No Growth', '1 Layer, No Growth'])
+# box_plot([layers_3_growth_false, layers_1_growth_false], ['3 Layers \n No Growth', '1 Layer \n No Growth'])
+# strip_plot([layers_3_growth_false, layers_1_growth_false], ['3 Layers \n No Growth', '1 Layer \n No Growth'])
 
 
 # Compare growth to no growth
-plot_average_fitness([layers_3_growth_true, layers_3_growth_false, layers_1_growth_true, layers_1_growth_false], ['3 Layers, Growth', '3 Layer, No Growth', '1 Layer, Growth', '1 Layer, No Growth'])
-strip_plot([layers_3_growth_true, layers_3_growth_false, layers_1_growth_true, layers_1_growth_false], ['3 Layers \n Growth', '3 Layer \n No Growth', '1 Layer \n Growth', '1 Layer \n No Growth'])
+# plot_average_fitness([layers_3_growth_true, layers_3_growth_false, layers_1_growth_true, layers_1_growth_false], ['3 Layers, Growth', '3 Layer, No Growth', '1 Layer, Growth', '1 Layer, No Growth'])
+# strip_plot([layers_3_growth_true, layers_3_growth_false, layers_1_growth_true, layers_1_growth_false], ['3 Layers \n Growth', '3 Layer \n No Growth', '1 Layer \n Growth', '1 Layer \n No Growth'])
 
 
 
