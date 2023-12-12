@@ -1,5 +1,6 @@
 import time
 
+import matplotlib.pyplot as plt
 from numba import cuda
 import numpy as np
 from PIL import Image
@@ -26,39 +27,45 @@ COLS_PER_THREAD = WORLD_SIZE // COL_BATCH_SIZE
 NUM_DOWN_WEIGHTS = 4
 NUM_AROUND_WEIGHTS = 9
 NUM_UP_WEIGHTS = 1
-TOTAL_WEIGHTS = NUM_DOWN_WEIGHTS + NUM_AROUND_WEIGHTS + NUM_UP_WEIGHTS
+NUM_INPUT_NEURONS = NUM_DOWN_WEIGHTS + NUM_AROUND_WEIGHTS + NUM_UP_WEIGHTS
+# Each cell at the bottom level has 5 output neurons
+# 4 binary outputs for spreading up/left/right/down, 1 for self signal state
+NUM_OUTPUT_NEURONS = 5
 
 # The genome consists of weights for all layers and an activation function
 # which is represented with four scalar values.
-LAYER_GENOME_SIZE = TOTAL_WEIGHTS + 4
+LAYER_GENOME_SHAPE = (NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS) 
 
 # Genome indices for thersholds of a non-linear activation function:
-LONELINESS_THRESHOLD = 0
-SPAWN_THRESHOLD_LOW = LONELINESS_THRESHOLD + 1
-SPAWN_THRESHOLD_HIGH = SPAWN_THRESHOLD_LOW + 1
-OVERPOPULATION_THRESHOLD = SPAWN_THRESHOLD_HIGH + 1
+# LONELINESS_THRESHOLD = 0
+# SPAWN_THRESHOLD_LOW = LONELINESS_THRESHOLD + 1
+# SPAWN_THRESHOLD_HIGH = SPAWN_THRESHOLD_LOW + 1
+# OVERPOPULATION_THRESHOLD = SPAWN_THRESHOLD_HIGH + 1
 # Genome indices for neighbor weights:
-DOWN_WEIGHTS_START = OVERPOPULATION_THRESHOLD + 1
+DOWN_WEIGHTS_START = 0
 AROUND_WEIGHTS_START = DOWN_WEIGHTS_START + NUM_DOWN_WEIGHTS
 UP_WEIGHTS_START = AROUND_WEIGHTS_START + NUM_AROUND_WEIGHTS
 
+LEFT_SPREAD_WEIGHTS_COL_IDX = 1
+RIGHT_SPREAD_WEIGHTS_COL_IDX = 2
+UP_SPREAD_WEIGHTS_COL_IDX = 3
+DOWN_SPREAD_WEIGHTS_COL_IDX = 4
+
 
 @cuda.jit
-def activate(layer, genotypes, pop_idx, prev_state, weighted_sum):
-    """Compute a cell's new value given the weighted sum of its neighbors."""
-    if weighted_sum <= genotypes[pop_idx][layer][LONELINESS_THRESHOLD]:
-        return DEAD
-    if (weighted_sum >= genotypes[pop_idx][layer][SPAWN_THRESHOLD_LOW] and
-        weighted_sum <= genotypes[pop_idx][layer][SPAWN_THRESHOLD_HIGH]):
-        return ALIVE
-    if weighted_sum >= genotypes[pop_idx][layer][OVERPOPULATION_THRESHOLD]:
-        return DEAD
-    return prev_state
+def activate_sigmoid(weighted_sum):
+    """If the weighted sum is negative, """
+    if weighted_sum <= 0:
+        return 0
+    return 1 / (1 + np.e ** (-weighted_sum))
 
 
 @cuda.jit
 def look_down(layer, phenotypes, genotypes, pop_idx, step, row, col):
     """Compute the weighted sum of this cell's neighbors in the layer below."""
+    if layer == 0:
+        return 0
+
     # The "granularity" of this layer. Layer0 == 1, layer1 == 2, layer2 == 4.
     g = 1 << layer
 
@@ -76,7 +83,7 @@ def look_down(layer, phenotypes, genotypes, pop_idx, step, row, col):
             r = r % WORLD_SIZE
             c = c % WORLD_SIZE
             neighbor_state = phenotypes[pop_idx][step-1][layer-1][r][c]
-            weight = genotypes[pop_idx][layer][weight_index]
+            weight = genotypes[pop_idx, layer][weight_index, 0]
             result += neighbor_state * weight
             weight_index += 1
     return result
@@ -101,7 +108,7 @@ def look_around(layer, phenotypes, genotypes, pop_idx, step, row, col):
             r = r % WORLD_SIZE
             c = c % WORLD_SIZE
             neighbor_state = phenotypes[pop_idx][step-1][layer][r][c]
-            weight = genotypes[pop_idx][layer][weight_index]
+            weight = genotypes[pop_idx, layer][weight_index, 0]
             result += neighbor_state * weight
             weight_index += 1
     return result
@@ -110,35 +117,95 @@ def look_around(layer, phenotypes, genotypes, pop_idx, step, row, col):
 @cuda.jit
 def look_up(layer, phenotypes, genotypes, pop_idx, step, row, col):
     """Compute the weighted sum of this cell's neighbors in the layer above."""
+    if layer == 2:
+        return 0
     # Look at just the single neighbor in the next layer up.
     neighbor_state = phenotypes[pop_idx][step-1][layer+1][row][col]
-    weight = genotypes[pop_idx][layer][UP_WEIGHTS_START]
+    weight = genotypes[pop_idx, layer][UP_WEIGHTS_START, 0]
     return neighbor_state * weight
+
+@cuda.jit
+def get_spread_update(phenotypes, genotypes, pop_idx, step, row, col): # L=0
+    left_spread_weighted_sum = 0
+    right_spread_weighted_sum = 0
+    up_spread_weighted_sum = 0
+    down_spread_weighted_sum = 0
+
+    # Sum over same-level neighbors
+    weight_idx = AROUND_WEIGHTS_START
+    for i,r in enumerate(range(row-1, row+2, 1)):
+        for j,c in enumerate(range(col-1, col+2, 1)):
+            r = r % WORLD_SIZE
+            c = c % WORLD_SIZE
+            neighbor_val = phenotypes[pop_idx][step-1][0][r][c]
+
+            left_weight = genotypes[pop_idx, 0][weight_idx, LEFT_SPREAD_WEIGHTS_COL_IDX]
+            right_weight = genotypes[pop_idx, 0][weight_idx, RIGHT_SPREAD_WEIGHTS_COL_IDX]
+            up_weight = genotypes[pop_idx, 0][weight_idx, LEFT_SPREAD_WEIGHTS_COL_IDX]
+            down_weight = genotypes[pop_idx, 0][weight_idx, RIGHT_SPREAD_WEIGHTS_COL_IDX]
+
+            left_spread_weighted_sum += left_weight * neighbor_val
+            right_spread_weighted_sum += right_weight * neighbor_val
+            up_spread_weighted_sum += up_weight * neighbor_val
+            down_spread_weighted_sum += down_weight * neighbor_val
+
+            weight_idx += 1
+
+    # Add the above layer's input
+    up_neighbor_val = phenotypes[pop_idx][step-1][1][row][col]
+    left_weight = genotypes[pop_idx, 0][weight_idx, LEFT_SPREAD_WEIGHTS_COL_IDX]
+    right_weight = genotypes[pop_idx, 0][weight_idx, RIGHT_SPREAD_WEIGHTS_COL_IDX]
+    up_weight = genotypes[pop_idx, 0][weight_idx, LEFT_SPREAD_WEIGHTS_COL_IDX]
+    down_weight = genotypes[pop_idx, 0][weight_idx, RIGHT_SPREAD_WEIGHTS_COL_IDX]
+
+    left_spread_weighted_sum += left_weight * up_neighbor_val
+    right_spread_weighted_sum += right_weight * up_neighbor_val
+    up_spread_weighted_sum += up_weight * up_neighbor_val
+    down_spread_weighted_sum += down_weight * up_neighbor_val
+
+    # print(left_spread_weighted_sum, right_spread_weighted_sum, up_spread_weighted_sum, down_spread_weighted_sum)
+
+    # Binarize
+    return (left_spread_weighted_sum > 0,
+            right_spread_weighted_sum > 0,
+            up_spread_weighted_sum > 0,
+            down_spread_weighted_sum > 0)
+
 
 
 @cuda.jit
-def update_cell(layer, phenotypes, genotypes, pop_idx, step, row, col):
+def update_cell(layer, use_growth, phenotypes, genotypes, pop_idx, step, row, col):
     """Compute the next state for a single cell in layer0 from prev states."""
+
     # Calculate the weighted sum of all neighbors.
-    weighted_sum = 0
-    if layer > 0:
-        weighted_sum += look_down(
-            layer, phenotypes, genotypes, pop_idx, step, row, col)
-    weighted_sum += look_around(
-        layer, phenotypes, genotypes, pop_idx, step, row, col)
-    if layer < 2:
-        weighted_sum += look_up(
-            layer, phenotypes, genotypes, pop_idx, step, row, col)
+    down_signal_sum = look_down(layer, phenotypes, genotypes, pop_idx, step, row, col) # Should return 0 for L=0
+    around_signal_sum = look_around(layer, phenotypes, genotypes, pop_idx, step, row, col) 
+    up_signal_sum = look_up(layer, phenotypes, genotypes, pop_idx, step, row, col)
+
+    signal_sum = down_signal_sum + around_signal_sum + up_signal_sum
+
+    # Update cells to be alive if on L=0 (only if current cell is actually alive)
+    alive = phenotypes[pop_idx][step][layer][row][col] != 0
+    if layer == 0 and alive and use_growth:
+        # Spread to nearby cells... is this necessary?
+        (left, right, up, down) = get_spread_update(phenotypes, genotypes, pop_idx, step, row, col)
+                
+        if left:
+            phenotypes[pop_idx][step][layer][(row % WORLD_SIZE)][((col-1) % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
+        if right:
+            phenotypes[pop_idx][step][layer][(row % WORLD_SIZE)][((col+1) % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
+        if up:
+            phenotypes[pop_idx][step][layer][((row-1) % WORLD_SIZE)][(col % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
+        if down:
+            phenotypes[pop_idx][step][layer][((row+1) % WORLD_SIZE)][(col % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
 
     # Actually update the phenotype state for step on layer1 at (row, col).
-    prev_state = phenotypes[pop_idx][step-1][layer][row][col]
-    phenotypes[pop_idx][step][layer][row][col] = activate(
-        layer, genotypes, pop_idx, prev_state, weighted_sum)
-
+    phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
+        
 
 # Max registers can be tuned per device. 64 is the most my laptop can handle.
 @cuda.jit(max_registers=64)
-def simulation_kernel(genotypes, layers, phenotypes):
+def simulation_kernel(genotypes, phenotypes, num_layers, use_growth):
     """Compute and record the full development process of a population."""
     # Compute indices for this thread.
     pop_idx = cuda.blockIdx.x
@@ -152,11 +219,23 @@ def simulation_kernel(genotypes, layers, phenotypes):
         # starting at start_col.
         for col in range(start_col, start_col + COLS_PER_THREAD):
             # Update the state in every layer this individual uses.
-            for layer in range(0, layers[pop_idx] + 1):
-                update_cell(layer, phenotypes, genotypes, pop_idx, step, row, col)
+            for layer in range(0, num_layers + 1):
+                update_cell(layer, use_growth, phenotypes, genotypes, pop_idx, step, row, col)
         # Make sure all threads have finished computing this step before going
         # on to the next one.
         cuda.syncthreads()
+
+def get_layer_mask(l):
+    """Mask the genome (the NN weights) for a given layer"""
+    mask = np.zeros(LAYER_GENOME_SHAPE)
+    if l == 0:   # L=0: All
+        mask[AROUND_WEIGHTS_START:][:] = 1
+    elif l == 1: # L=1: All inputs, single output
+        mask[:, 0] = 1
+    elif l == 2: # L=2: All inputs except above
+        mask[DOWN_WEIGHTS_START:UP_WEIGHTS_START, 0] = 1
+
+    return mask
 
 
 def check_granularity(g, image):
@@ -169,15 +248,16 @@ def check_granularity(g, image):
     return np.array_equal(image, scaled_up)
 
 
-def simulate(genotypes, layers, phenotypes):
+def simulate(genotypes, num_layers, use_growth, phenotypes):
     """Simulate genotypes and return phenotype videos."""
+
     # Infer population size from genotypes
     pop_size = genotypes.shape[0]
 
     # Each individual has a genotype that consists of an activation function
     # and a set of neighbor weights for each layer in the hierarchical CA.
-    assert genotypes.shape == (pop_size, 3, LAYER_GENOME_SIZE)
-    assert genotypes.dtype == np.uint8
+    assert genotypes.shape == (pop_size, 3, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS)
+    # assert genotypes.dtype == np.uint8
 
     # Each individual is configured to have 0, 1, or 2 extra layers. This way,
     # we can simulate individuals from control and experiment in the same
@@ -185,14 +265,17 @@ def simulate(genotypes, layers, phenotypes):
     # hurt performance, but shouldn't because each individual is handled by
     # MAX_THREADS_PER_BLOCK threads, which should mean that whole warps fall
     # out of the computation together.
-    assert layers.shape == (pop_size,)
-    assert layers.dtype == np.uint8
-    assert all(layer in range(NUM_LAYERS) for layer in layers)
+    assert type(num_layers) is int
+    assert num_layers in range(NUM_LAYERS)
+
+    assert type(use_growth) is bool
+
+    assert phenotypes.shape == (
+        pop_size, NUM_STEPS, NUM_LAYERS, WORLD_SIZE, WORLD_SIZE)
 
     # Copy input data from host memory to device memory.
     d_phenotypes = cuda.to_device(phenotypes)
     d_genotypes = cuda.to_device(genotypes)
-    d_layers = cuda.to_device(layers)
 
     # Actually run the simulation for all individuals in parallel on the GPU.
     simulation_kernel[
@@ -203,7 +286,7 @@ def simulate(genotypes, layers, phenotypes):
         # the CA world to compute, and the Y dimension is multiplied by
         # COLS_PER_THREAD to find the first column to start from.
         (WORLD_SIZE, COL_BATCH_SIZE)
-    ](d_genotypes, d_layers, d_phenotypes)
+    ](d_genotypes, d_phenotypes, num_layers, use_growth)
 
     # Copy output data from device memory to host memory.
     phenotypes = d_phenotypes.copy_to_host()
@@ -233,13 +316,26 @@ def make_seed_phenotypes(pop_size):
     # but are represented using arrays of the same size for simplicity.
     phenotypes = np.full(
         (pop_size, NUM_STEPS, NUM_LAYERS, WORLD_SIZE, WORLD_SIZE),
-        DEAD, dtype=np.uint8)
+        DEAD, dtype=np.float32)
 
     # Use a single ALIVE pixel in the middle of the CA world as the initial
     # phenotype state for all individuals in the population.
     for i in range(pop_size):
         middle = WORLD_SIZE // 2
         phenotypes[i][0][0][middle][middle] = ALIVE
+
+    return phenotypes
+
+def make_seed_genotypes(pop_size):
+    """Starting genotypes: random initialization"""
+    # Randomly initialize the NN weights
+    genotypes = np.random.random((pop_size, 3, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS)).astype(np.float32) * 2 - 1
+    
+    # Mask out the weights of layers 1 and 2
+    for l in range(NUM_LAYERS):
+        genotypes[:, l] = genotypes[:, l] * get_layer_mask(l)
+
+    return genotypes
 
 
 def compute_fitness(phenotypes, target):
@@ -264,162 +360,46 @@ def compute_fitness(phenotypes, target):
     return fitness_scores
 
 
-def visualize(phenotype, filename):
+def visualize(phenotype, filename, layer=0):
     def make_frame(frame_data):
         # Scale up the image 4x to make it more visible.
-        frame_data = frame_data.repeat(4, 1).repeat(4, 2)
+        # frame_data = frame_data.repeat(4, 1).repeat(4, 2)
         layer0, layer1, layer2 = frame_data
+        l, w = layer0.shape
+        # print(layer0[l//2-1:l//2+5, w//2-1:w//2+5])
         # Make a composite of layers 1 and 2 to overlay on layer0.
-        overlay = np.array(
-            np.bitwise_or(
-                layer1 * 0xffff0000,  # layer1 in blue
-                layer2 * 0xff00ff00), # layer2 in green
-            dtype=np.uint32)
+        # print(layer1 * 0xffff0000, (layer1 * 0xffff0000).shape)
+        # print(layer2 * 0xff00ff00, (layer2 * 0xff00ff00).shape)
+        # overlay = np.array(
+        #     np.bitwise_or(
+        #         layer1 * 0xffff0000,  # layer1 in blue
+        #         layer2 * 0xff00ff00), # layer2 in green
+        #     dtype=np.uint32)
         # Render layer0 as a black and white image.
         base = np.array(
             np.bitwise_or(
-                (layer0 == DEAD) * 0xffffffff,   # DEAD cells are black
-                (layer0 == ALIVE) * 0xff000000), # ALIVE cells are white
+                (layer0 != DEAD) * 0xffffffff,   # DEAD cells are black
+                (layer0 == DEAD) * 0xff000000), # ALIVE cells are white
             dtype=np.uint32)
         # Merge the base and overlay images.
-        return Image.blend(
-            Image.fromarray(base, mode='RGBA'),
-            Image.fromarray(overlay, mode='RGBA'),
-            0.3)
+        # return layer1
+        if layer == 0:
+            return Image.fromarray(layer0, mode='RGBA')
+        elif layer == 1:
+            return Image.fromarray(layer1, mode='RGBA')
+        elif layer == 2:
+            return Image.fromarray(layer2, mode='RGBA') 
+        elif layer == 'base':
+            return Image.fromarray(base, mode='RGBA')
+        # return Image.blend(
+        #     Image.fromarray(base, mode='RGBA'),
+        #     Image.fromarray(overlay, mode='RGBA'),
+        #     0.3)
 
     frames = [make_frame(frame_data) for frame_data in phenotype]
-    frames[0].save(filename, save_all=True, append_images=frames[1:], loop=0)
-
-
-def demo():
-    """Run a simple demo to sanity check the code above."""
-    # The number of simulations to run in one batch. This is limited by the
-    # available GPU memory, but the bigger this number the more efficient the
-    # simulation will be.
-    pop_size = 2500
-
-    gol_genotype = np.array(
-        [[ # Layer0 (Game of Life rules)
-            1, # Loneliness threshold
-            3, # Spawn threshold low
-            3, # Spawn threshold high
-            4, # Overpopulation threshold
-            0, # Down neighbor NW (N/A)
-            0, # Down neighbor NE (N/A)
-            0, # Down neighbor SW (N/A)
-            0, # Down neighbor SE (N/A)
-            1, # Around neighbor NW
-            1, # Around neighbor N
-            1, # Around neighbor NE
-            1, # Around neighbor W
-            0, # This cell.
-            1, # Around neighbor E
-            1, # Around neighbor SW
-            1, # Around neighbor S
-            1, # Around neighbor SE
-            0, # Up neighbor
-         ],
-         [ # Layer1 (highlight live cells below)
-            0, # Loneliness threshold
-            1, # Spawn threshold low
-            4, # Spawn threshold high
-            5, # Overpopulation threshold
-            1, # Down neighbor NW
-            1, # Down neighbor NE
-            1, # Down neighbor SW
-            1, # Down neighbor SE
-            0, # Around neighbor NW
-            0, # Around neighbor N
-            0, # Around neighbor NE
-            0, # Around neighbor W
-            0, # This cell.
-            0, # Around neighbor E
-            0, # Around neighbor SW
-            0, # Around neighbor S
-            0, # Around neighbor SE
-            0, # Up neighbor
-         ],
-         [ # Layer2 (highlight live cells below)
-            0, # Loneliness threshold
-            1, # Spawn threshold low
-            4, # Spawn threshold high
-            5, # Overpopulation threshold
-            1, # Down neighbor NW
-            1, # Down neighbor NE
-            1, # Down neighbor SW
-            1, # Down neighbor SE
-            0, # Around neighbor NW
-            0, # Around neighbor N
-            0, # Around neighbor NE
-            0, # Around neighbor W
-            0, # This cell.
-            0, # Around neighbor E
-            0, # Around neighbor SW
-            0, # Around neighbor S
-            0, # Around neighbor SE
-            0, # Up neighbor (N/A)
-         ]],
-        dtype=np.uint8)
-
-    # Give every individual in the population the same genotype.
-    genotypes = np.broadcast_to(
-        gol_genotype, (pop_size, 3, LAYER_GENOME_SIZE))
-
-    # Generate a mix of simulations with 0, 1, or 2 layers.
-    # Pattern is: 0, 1, 2, 0, 1, 2, 0, 1, 2, ...
-    layers = np.zeros(pop_size, dtype=np.uint8)
-    layers[1:3] = 1
-    layers[2:3] = 2
-
-    # Set up a GOL scenario where a glider will crash into a pinwheel as the
-    # initial phenotype state for all the simulations.
-    glider = np.array(
-        [[0, 1, 0],
-         [0, 0, 1],
-         [1, 1, 1]],
-        dtype=np.uint8)
-
-    pinwheel = np.array(
-        [[0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0],
-         [0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0],
-         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-         [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0],
-         [1, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0],
-         [1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0],
-         [0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 1],
-         [0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1],
-         [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0],
-         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-         [0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0],
-         [0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0]],
-        dtype=np.uint8)
-
-    phenotypes = np.full(
-        (pop_size, NUM_STEPS, NUM_LAYERS, WORLD_SIZE, WORLD_SIZE),
-        DEAD, dtype=np.uint8)
-    for i in range(pop_size):
-        phenotypes[i][0][0][32:44, 32:44] = pinwheel
-        phenotypes[i][0][0][16:19, 16:19] = glider
-
-    # Actually run the simulations, and time how long it takes.
-    print(f'Starting {pop_size} simulations...')
-    start = time.perf_counter()
-    phenotypes = simulate(genotypes, layers, phenotypes)
-    elapsed = time.perf_counter() - start
-    lps = pop_size / elapsed
-    print(f'Finished in {elapsed:0.2f} seconds '
-          f'({lps:0.2f} lifetimes per second).')
-
-    # Compute fitness just to run the function through its paces. The target is
-    # random, so the result is meaningless.
-    target = np.random.choice((DEAD, ALIVE), (WORLD_SIZE, WORLD_SIZE))
-    compute_fitness(phenotypes, target)
-
-    # Output a gif video of the demo simulation with 0, 1, and 2 layers.
-    visualize(phenotypes[0], 'demo0.gif')
-    visualize(phenotypes[1], 'demo1.gif')
-    visualize(phenotypes[2], 'demo2.gif')
-
-
-if __name__ == '__main__':
-    demo()
+    # plt.imshow(frames[11])
+    # plt.show()
+    # plt.imshow(frames[12])
+    # plt.show()
+    
+    frames[0].save(filename, save_all=True, append_images=frames[1:], loop=0, duration=10)

@@ -1,0 +1,9 @@
+*.gif
+*.pyc
+*.pkl
+*.png
+*.txt
+experiments
+experiments/*
+vacc_out_files
+vacc_out_files/*
