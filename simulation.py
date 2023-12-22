@@ -59,6 +59,14 @@ def activate_sigmoid(weighted_sum):
         return 0
     return 1 / (1 + np.e ** (-weighted_sum))
 
+@cuda.jit
+def activate_tanh(weighted_sum):
+    return 0.5 * (np.tanh(weighted_sum) + 1)
+
+@cuda.jit
+def activate_softmax(weighted_sums):
+    e = np.exp(weighted_sums - np.max(weighted_sums))
+    return e / e.sum(axis=0)
 
 @cuda.jit
 def look_down(layer, phenotypes, genotypes, pop_idx, step, row, col):
