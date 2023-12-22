@@ -182,7 +182,7 @@ def get_spread_update(phenotypes, genotypes, pop_idx, step, row, col): # L=0
 
 
 @cuda.jit
-def update_cell(layer, use_growth, phenotypes, genotypes, pop_idx, step, row, col):
+def update_cell(layer, use_growth, phenotypes, genotypes, pop_idx, step, row, col, activation='sigmoid'):
     """Compute the next state for a single cell in layer0 from prev states."""
 
     # Calculate the weighted sum of all neighbors.
@@ -208,12 +208,17 @@ def update_cell(layer, use_growth, phenotypes, genotypes, pop_idx, step, row, co
             phenotypes[pop_idx][step][layer][((row+1) % WORLD_SIZE)][(col % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
 
     # Actually update the phenotype state for step on layer1 at (row, col).
-    phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
+    if activation == 'sigmoid':
+        phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
+    elif activation == 'tanh':
+        phenotypes[pop_idx][step][layer][row][col] = activate_tanh(signal_sum)
+    elif activation == 'softmax':
+        phenotypes[pop_idx][step][layer][row][col] = activate_softmax(signal_sum)
         
 
 # Max registers can be tuned per device. 64 is the most my laptop can handle.
 @cuda.jit(max_registers=64)
-def simulation_kernel(genotypes, phenotypes, num_layers, use_growth):
+def simulation_kernel(genotypes, phenotypes, num_layers, use_growth, activation='sigmoid'):
     """Compute and record the full development process of a population."""
     # Compute indices for this thread.
     pop_idx = cuda.blockIdx.x
@@ -228,7 +233,7 @@ def simulation_kernel(genotypes, phenotypes, num_layers, use_growth):
         for col in range(start_col, start_col + COLS_PER_THREAD):
             # Update the state in every layer this individual uses.
             for layer in range(0, num_layers + 1):
-                update_cell(layer, use_growth, phenotypes, genotypes, pop_idx, step, row, col)
+                update_cell(layer, use_growth, phenotypes, genotypes, pop_idx, step, row, col, activation)
         # Make sure all threads have finished computing this step before going
         # on to the next one.
         cuda.syncthreads()
@@ -256,7 +261,7 @@ def check_granularity(g, image):
     return np.array_equal(image, scaled_up)
 
 
-def simulate(genotypes, num_layers, use_growth, phenotypes):
+def simulate(genotypes, num_layers, use_growth, phenotypes, activation='sigmoid'):
     """Simulate genotypes and return phenotype videos."""
 
     # Infer population size from genotypes
@@ -294,7 +299,7 @@ def simulate(genotypes, num_layers, use_growth, phenotypes):
         # the CA world to compute, and the Y dimension is multiplied by
         # COLS_PER_THREAD to find the first column to start from.
         (WORLD_SIZE, COL_BATCH_SIZE)
-    ](d_genotypes, d_phenotypes, num_layers, use_growth)
+    ](d_genotypes, d_phenotypes, num_layers, use_growth, activation)
 
     # Copy output data from device memory to host memory.
     phenotypes = d_phenotypes.copy_to_host()

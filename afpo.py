@@ -80,6 +80,7 @@ class AgeFitnessPareto:
         self.target_population_size = experiment_constants['target_population_size']
         self.layers = experiment_constants['layers']
         self.use_growth = experiment_constants['use_growth']
+        self.activation = experiment_constants['activation']
         self.population = []
         self.current_generation = 1
 
@@ -104,7 +105,7 @@ class AgeFitnessPareto:
         ##### SIMULATE ON GPUs #####
         print(f'Starting {self.target_population_size} simulations...')
         phenotypes = simulate(
-            unsimulated_genotypes, self.layers - 1, self.use_growth, init_phenotypes)
+            unsimulated_genotypes, self.layers - 1, self.use_growth, init_phenotypes, self.activation)
 
         elapsed = time.perf_counter() - start
         lps = self.target_population_size / elapsed
