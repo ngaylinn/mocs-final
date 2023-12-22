@@ -1,4 +1,5 @@
 import time
+import math
 
 import matplotlib.pyplot as plt
 from numba import cuda
@@ -61,12 +62,12 @@ def activate_sigmoid(weighted_sum):
 
 @cuda.jit
 def activate_tanh(weighted_sum):
-    return 0.5 * (np.tanh(weighted_sum) + 1)
+    return 0.5 * (math.tanh(weighted_sum) + 1)
 
 @cuda.jit
-def activate_softmax(weighted_sums):
-    e = np.exp(weighted_sums - np.max(weighted_sums))
-    return e / e.sum(axis=0)
+def activate_relu(weighted_sum):
+    return max(0.0, min(1.0, weighted_sum))
+
 
 @cuda.jit
 def look_down(layer, phenotypes, genotypes, pop_idx, step, row, col):
@@ -212,8 +213,8 @@ def update_cell(layer, use_growth, phenotypes, genotypes, pop_idx, step, row, co
         phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
     elif activation == 'tanh':
         phenotypes[pop_idx][step][layer][row][col] = activate_tanh(signal_sum)
-    elif activation == 'softmax':
-        phenotypes[pop_idx][step][layer][row][col] = activate_softmax(signal_sum)
+    elif activation == 'relu':
+        phenotypes[pop_idx][step][layer][row][col] = activate_relu(signal_sum)
         
 
 # Max registers can be tuned per device. 64 is the most my laptop can handle.
@@ -232,7 +233,7 @@ def simulation_kernel(genotypes, phenotypes, num_layers, use_growth, activation=
         # starting at start_col.
         for col in range(start_col, start_col + COLS_PER_THREAD):
             # Update the state in every layer this individual uses.
-            for layer in range(0, num_layers + 1):
+            for layer in range(0, num_layers):
                 update_cell(layer, use_growth, phenotypes, genotypes, pop_idx, step, row, col, activation)
         # Make sure all threads have finished computing this step before going
         # on to the next one.

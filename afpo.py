@@ -105,7 +105,7 @@ class AgeFitnessPareto:
         ##### SIMULATE ON GPUs #####
         print(f'Starting {self.target_population_size} simulations...')
         phenotypes = simulate(
-            unsimulated_genotypes, self.layers - 1, self.use_growth, init_phenotypes, self.activation)
+            unsimulated_genotypes, self.layers, self.use_growth, init_phenotypes, self.activation)
 
         elapsed = time.perf_counter() - start
         lps = self.target_population_size / elapsed
