@@ -8,8 +8,8 @@ from PIL import Image
 
 # Phenotype development unfolds over NUM_STEPS time steps.
 NUM_STEPS = 100
-# This code models hierarchical CAs with 1, 2, or 3 layers.
-NUM_LAYERS = 3
+# This code models hierarchical CAs with 1, 2, 3, or 4 layers.
+NUM_LAYERS = 4
 # Phenotypes are all 64x64 squares.
 WORLD_SIZE = 64
 
@@ -75,7 +75,7 @@ def look_down(layer, phenotypes, genotypes, pop_idx, step, row, col):
     if layer == 0:
         return 0
 
-    # The "granularity" of this layer. Layer0 == 1, layer1 == 2, layer2 == 4.
+    # The "granularity" of this layer. Layer0 == 1, layer1 == 2, layer2 == 4, layer3 == 8
     g = 1 << layer
 
     weight_index = DOWN_WEIGHTS_START
@@ -126,7 +126,7 @@ def look_around(layer, phenotypes, genotypes, pop_idx, step, row, col):
 @cuda.jit
 def look_up(layer, phenotypes, genotypes, pop_idx, step, row, col):
     """Compute the weighted sum of this cell's neighbors in the layer above."""
-    if layer == 2:
+    if layer == NUM_LAYERS:
         return 0
     # Look at just the single neighbor in the next layer up.
     neighbor_state = phenotypes[pop_idx][step-1][layer+1][row][col]
@@ -242,12 +242,12 @@ def simulation_kernel(genotypes, phenotypes, num_layers, use_growth, activation=
 def get_layer_mask(l):
     """Mask the genome (the NN weights) for a given layer"""
     mask = np.zeros(LAYER_GENOME_SHAPE)
-    if l == 0:   # L=0: All
+    if l == 0:   # L=0: All inputs except below
         mask[AROUND_WEIGHTS_START:][:] = 1
-    elif l == 1: # L=1: All inputs, single output
-        mask[:, 0] = 1
-    elif l == 2: # L=2: All inputs except above
+    elif l == (NUM_LAYERS - 1): # Top layer: All inputs except above
         mask[DOWN_WEIGHTS_START:UP_WEIGHTS_START, 0] = 1
+    else: # Middle layers: All inputs, single output
+        mask[:, 0] = 1
 
     return mask
 
@@ -270,7 +270,7 @@ def simulate(genotypes, num_layers, use_growth, phenotypes, activation='sigmoid'
 
     # Each individual has a genotype that consists of an activation function
     # and a set of neighbor weights for each layer in the hierarchical CA.
-    assert genotypes.shape == (pop_size, 3, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS)
+    assert genotypes.shape == (pop_size, NUM_LAYERS, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS)
     # assert genotypes.dtype == np.uint8
 
     # Each individual is configured to have 0, 1, or 2 extra layers. This way,
@@ -343,7 +343,7 @@ def make_seed_phenotypes(pop_size):
 def make_seed_genotypes(pop_size):
     """Starting genotypes: random initialization"""
     # Randomly initialize the NN weights
-    genotypes = np.random.random((pop_size, 3, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS)).astype(np.float32) * 2 - 1
+    genotypes = np.random.random((pop_size, NUM_LAYERS, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS)).astype(np.float32) * 2 - 1
     
     # Mask out the weights of layers 1 and 2
     for l in range(NUM_LAYERS):
