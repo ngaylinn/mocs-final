@@ -74,15 +74,15 @@ def activate_relu(weighted_sum):
 
 
 @cuda.jit
-def look_down(layer, phenotypes, genotypes, pop_idx, step, row, col):
+def look_down(layer, phenotypes, genotypes, growth, down_weights_start, pop_idx, step, row, col):
     """Compute the weighted sum of this cell's neighbors in the layer below."""
-    if layer == 0:
+    if layer == 0 and growth == 0:
         return 0
 
     # The "granularity" of this layer. Layer0 == 1, layer1 == 2, layer2 == 4, layer3 == 8
     g = 1 << layer
 
-    weight_index = DOWN_WEIGHTS_START
+    weight_index = down_weights_start
     result = 0
     # Look at all the cells that occupy "the same position" as this cell but
     # one layer down.
@@ -96,19 +96,19 @@ def look_down(layer, phenotypes, genotypes, pop_idx, step, row, col):
             r = r % WORLD_SIZE
             c = c % WORLD_SIZE
             neighbor_state = phenotypes[pop_idx][step-1][layer-1][r][c]
-            weight = genotypes[pop_idx, layer][weight_index, 0]
+            weight = genotypes[pop_idx, weight_index, layer]
             result += neighbor_state * weight
             weight_index += 1
     return result
 
 
 @cuda.jit
-def look_around(layer, phenotypes, genotypes, pop_idx, step, row, col):
+def look_around(layer, phenotypes, genotypes, around_weights_start, pop_idx, step, row, col):
     """Compute the weighted sum of this cell's neighbors in this layer."""
     # The "granularity" of this layer. Layer0 == 1, layer1 == 2, layer2 == 4.
     g = 1 << layer
 
-    weight_index = AROUND_WEIGHTS_START
+    weight_index = around_weights_start
     result = 0
     # Look at a Moore neighborhood around (row, col) in the current layer.
     for r in range(row-g, row+g+1, g):
@@ -121,87 +121,109 @@ def look_around(layer, phenotypes, genotypes, pop_idx, step, row, col):
             r = r % WORLD_SIZE
             c = c % WORLD_SIZE
             neighbor_state = phenotypes[pop_idx][step-1][layer][r][c]
-            weight = genotypes[pop_idx, layer][weight_index, 0]
+            weight = genotypes[pop_idx, weight_index, layer]
             result += neighbor_state * weight
             weight_index += 1
     return result
 
 
 @cuda.jit
-def look_up(layer, phenotypes, genotypes, pop_idx, step, row, col):
+def look_up(layer, phenotypes, genotypes, growth, up_weights_start, pop_idx, step, row, col):
     """Compute the weighted sum of this cell's neighbors in the layer above."""
-    if layer == NUM_LAYERS:
+    if layer == NUM_LAYERS and growth == 0:
         return 0
     # Look at just the single neighbor in the next layer up.
     neighbor_state = phenotypes[pop_idx][step-1][layer+1][row][col]
-    weight = genotypes[pop_idx, layer][UP_WEIGHTS_START, 0]
+    weight = genotypes[pop_idx, up_weights_start, layer]
     return neighbor_state * weight
 
 @cuda.jit
-def get_spread_update(phenotypes, genotypes, pop_idx, step, row, col): # L=0
-    left_spread_weighted_sum = 0
-    right_spread_weighted_sum = 0
-    up_spread_weighted_sum = 0
-    down_spread_weighted_sum = 0
+def get_spread_update(phenotypes, growth_genotypes, around_start, above_start, pop_idx, step, row, col):
+    up_spread_weighted_sum = look_up(0, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
+    + look_around(0, phenotypes, growth_genotypes, 1, around_start, pop_idx, step, row, col) 
+    + look_down(0, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
+    down_spread_weighted_sum = look_up(1, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
+    + look_around(1, phenotypes, growth_genotypes, 1, around_start, pop_idx, step, row, col) 
+    + look_down(1, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
+    left_spread_weighted_sum = look_up(2, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
+    + look_around(2, phenotypes, growth_genotypes, 1, around_start, pop_idx, step, row, col) 
+    + look_down(2, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
+    right_spread_weighted_sum = look_up(3, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
+    + look_around(3, phenotypes, growth_genotypes, 1, around_start, pop_idx, step, row, col) 
+    + look_down(3, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
 
-    # Sum over same-level neighbors
-    weight_idx = AROUND_WEIGHTS_START
-    for i,r in enumerate(range(row-1, row+2, 1)):
-        for j,c in enumerate(range(col-1, col+2, 1)):
-            r = r % WORLD_SIZE
-            c = c % WORLD_SIZE
-            neighbor_val = phenotypes[pop_idx][step-1][0][r][c]
-
-            left_weight = genotypes[pop_idx, 0][weight_idx, LEFT_SPREAD_WEIGHTS_COL_IDX]
-            right_weight = genotypes[pop_idx, 0][weight_idx, RIGHT_SPREAD_WEIGHTS_COL_IDX]
-            up_weight = genotypes[pop_idx, 0][weight_idx, LEFT_SPREAD_WEIGHTS_COL_IDX]
-            down_weight = genotypes[pop_idx, 0][weight_idx, RIGHT_SPREAD_WEIGHTS_COL_IDX]
-
-            left_spread_weighted_sum += left_weight * neighbor_val
-            right_spread_weighted_sum += right_weight * neighbor_val
-            up_spread_weighted_sum += up_weight * neighbor_val
-            down_spread_weighted_sum += down_weight * neighbor_val
-
-            weight_idx += 1
-
-    # Add the above layer's input
-    up_neighbor_val = phenotypes[pop_idx][step-1][1][row][col]
-    left_weight = genotypes[pop_idx, 0][weight_idx, LEFT_SPREAD_WEIGHTS_COL_IDX]
-    right_weight = genotypes[pop_idx, 0][weight_idx, RIGHT_SPREAD_WEIGHTS_COL_IDX]
-    up_weight = genotypes[pop_idx, 0][weight_idx, LEFT_SPREAD_WEIGHTS_COL_IDX]
-    down_weight = genotypes[pop_idx, 0][weight_idx, RIGHT_SPREAD_WEIGHTS_COL_IDX]
-
-    left_spread_weighted_sum += left_weight * up_neighbor_val
-    right_spread_weighted_sum += right_weight * up_neighbor_val
-    up_spread_weighted_sum += up_weight * up_neighbor_val
-    down_spread_weighted_sum += down_weight * up_neighbor_val
-
-    # print(left_spread_weighted_sum, right_spread_weighted_sum, up_spread_weighted_sum, down_spread_weighted_sum)
-
-    # Binarize
     return (left_spread_weighted_sum > 0,
-            right_spread_weighted_sum > 0,
-            up_spread_weighted_sum > 0,
-            down_spread_weighted_sum > 0)
+        right_spread_weighted_sum > 0,
+        up_spread_weighted_sum > 0,
+        down_spread_weighted_sum > 0)
+
+
+
+# @cuda.jit
+# def get_spread_update(phenotypes, growth_genotypes, pop_idx, step, row, col): # L=0
+#     left_spread_weighted_sum = 0
+#     right_spread_weighted_sum = 0
+#     up_spread_weighted_sum = 0
+#     down_spread_weighted_sum = 0
+
+#     # Sum over same-level neighbors
+#     weight_idx = AROUND_WEIGHTS_START
+#     for i,r in enumerate(range(row-1, row+2, 1)):
+#         for j,c in enumerate(range(col-1, col+2, 1)):
+#             r = r % WORLD_SIZE
+#             c = c % WORLD_SIZE
+#             neighbor_val = phenotypes[pop_idx][step-1][0][r][c]
+
+#             left_weight = genotypes[pop_idx][weight_idx, LEFT_SPREAD_WEIGHTS_COL_IDX]
+#             right_weight = genotypes[pop_idx][weight_idx, RIGHT_SPREAD_WEIGHTS_COL_IDX]
+#             up_weight = genotypes[pop_idx][weight_idx, LEFT_SPREAD_WEIGHTS_COL_IDX]
+#             down_weight = genotypes[pop_idx][weight_idx, RIGHT_SPREAD_WEIGHTS_COL_IDX]
+
+#             left_spread_weighted_sum += left_weight * neighbor_val
+#             right_spread_weighted_sum += right_weight * neighbor_val
+#             up_spread_weighted_sum += up_weight * neighbor_val
+#             down_spread_weighted_sum += down_weight * neighbor_val
+
+#             weight_idx += 1
+
+#     # Add the above layer's input
+#     up_neighbor_val = phenotypes[pop_idx][step-1][1][row][col]
+#     left_weight = genotypes[pop_idx, 0][weight_idx, LEFT_SPREAD_WEIGHTS_COL_IDX]
+#     right_weight = genotypes[pop_idx, 0][weight_idx, RIGHT_SPREAD_WEIGHTS_COL_IDX]
+#     up_weight = genotypes[pop_idx, 0][weight_idx, LEFT_SPREAD_WEIGHTS_COL_IDX]
+#     down_weight = genotypes[pop_idx, 0][weight_idx, RIGHT_SPREAD_WEIGHTS_COL_IDX]
+
+#     left_spread_weighted_sum += left_weight * up_neighbor_val
+#     right_spread_weighted_sum += right_weight * up_neighbor_val
+#     up_spread_weighted_sum += up_weight * up_neighbor_val
+#     down_spread_weighted_sum += down_weight * up_neighbor_val
+
+#     # print(left_spread_weighted_sum, right_spread_weighted_sum, up_spread_weighted_sum, down_spread_weighted_sum)
+
+#     # Binarize
+#     return (left_spread_weighted_sum > 0,
+#             right_spread_weighted_sum > 0,
+#             up_spread_weighted_sum > 0,
+#             down_spread_weighted_sum > 0)
 
 
 
 @cuda.jit
-def update_cell(layer, use_growth, phenotypes, genotypes, pop_idx, step, row, col, activation='sigmoid'):
+def update_cell(layer, use_growth, phenotypes, growth_genotypes, state_genotypes, base_layer, around_start, above_start, pop_idx, step, row, col, activation):
     """Compute the next state for a single cell in layer0 from prev states."""
 
     # Calculate the weighted sum of all neighbors.
-    down_signal_sum = look_down(layer, phenotypes, genotypes, pop_idx, step, row, col) # Should return 0 for L=0
-    around_signal_sum = look_around(layer, phenotypes, genotypes, pop_idx, step, row, col) 
-    up_signal_sum = look_up(layer, phenotypes, genotypes, pop_idx, step, row, col)
+    down_signal_sum = look_down(layer, phenotypes, state_genotypes, 0, pop_idx, step, row, col) # Should return 0 for L=0
+    around_signal_sum = look_around(layer, phenotypes, state_genotypes, around_start, pop_idx, step, row, col) 
+    up_signal_sum = look_up(layer, phenotypes, state_genotypes, above_start, pop_idx, step, row, col)
 
     signal_sum = down_signal_sum + around_signal_sum + up_signal_sum
 
     # Update cells to be alive if on L=0 (only if current cell is actually alive)
     alive = phenotypes[pop_idx][step][layer][row][col] != 0
-    if layer == 0 and alive and use_growth:
+    if layer == base_layer and alive and use_growth:
         # Spread to nearby cells... is this necessary?
-        (left, right, up, down) = get_spread_update(phenotypes, genotypes, pop_idx, step, row, col)
+        (left, right, up, down) = get_spread_update(phenotypes, growth_genotypes, around_start, above_start, pop_idx, step, row, col)
                 
         if left:
             phenotypes[pop_idx][step][layer][(row % WORLD_SIZE)][((col-1) % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
@@ -223,7 +245,7 @@ def update_cell(layer, use_growth, phenotypes, genotypes, pop_idx, step, row, co
 
 # Max registers can be tuned per device. 64 is the most my laptop can handle.
 @cuda.jit(max_registers=64)
-def simulation_kernel(genotypes, phenotypes, num_layers, use_growth, activation='sigmoid'):
+def simulation_kernel(growth_genotypes, state_genotypes, phenotypes, num_layers, base_layer, below_start, around_start, above_start, use_growth, activation):
     """Compute and record the full development process of a population."""
     # Compute indices for this thread.
     pop_idx = cuda.blockIdx.x
@@ -238,7 +260,7 @@ def simulation_kernel(genotypes, phenotypes, num_layers, use_growth, activation=
         for col in range(start_col, start_col + COLS_PER_THREAD):
             # Update the state in every layer this individual uses.
             for layer in range(0, num_layers):
-                update_cell(layer, use_growth, phenotypes, genotypes, pop_idx, step, row, col, activation)
+                update_cell(layer, use_growth, phenotypes, growth_genotypes, state_genotypes, base_layer, below_start, around_start, above_start, pop_idx, step, row, col, activation)
         # Make sure all threads have finished computing this step before going
         # on to the next one.
         cuda.syncthreads()
@@ -266,15 +288,17 @@ def check_granularity(g, image):
     return np.array_equal(image, scaled_up)
 
 
-def simulate(genotypes, num_layers, use_growth, phenotypes, activation):
+def simulate(growth_genotypes, state_genotypes, num_layers, base_layer, below_start, around_start, above_start, use_growth, phenotypes, activation):
     """Simulate genotypes and return phenotype videos."""
 
     # Infer population size from genotypes
-    pop_size = genotypes.shape[0]
+    pop_size = growth_genotypes.shape[0]
 
     # Each individual has a genotype that consists of an activation function
     # and a set of neighbor weights for each layer in the hierarchical CA.
-    assert genotypes.shape == (pop_size, NUM_LAYERS, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS)
+
+    # assert growth_genotypes.shape == (pop_size, num_layers, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS)
+    
     # assert genotypes.dtype == np.uint8
 
     # Each individual is configured to have 0, 1, or 2 extra layers. This way,
@@ -284,17 +308,18 @@ def simulate(genotypes, num_layers, use_growth, phenotypes, activation):
     # MAX_THREADS_PER_BLOCK threads, which should mean that whole warps fall
     # out of the computation together.
     assert type(num_layers) is int
-    assert num_layers in range(NUM_LAYERS + 1)
+    assert num_layers in range(1, NUM_LAYERS + 1)
 
     assert type(use_growth) is bool
     assert type(activation) is int
 
     assert phenotypes.shape == (
-        pop_size, NUM_STEPS, NUM_LAYERS, WORLD_SIZE, WORLD_SIZE)
+        pop_size, NUM_STEPS, num_layers, WORLD_SIZE, WORLD_SIZE)
 
     # Copy input data from host memory to device memory.
     d_phenotypes = cuda.to_device(phenotypes)
-    d_genotypes = cuda.to_device(genotypes)
+    d_growth_genotypes = cuda.to_device(growth_genotypes)
+    d_state_genotypes = cuda.to_device(state_genotypes)
 
     # Actually run the simulation for all individuals in parallel on the GPU.
     simulation_kernel[
@@ -305,7 +330,7 @@ def simulate(genotypes, num_layers, use_growth, phenotypes, activation):
         # the CA world to compute, and the Y dimension is multiplied by
         # COLS_PER_THREAD to find the first column to start from.
         (WORLD_SIZE, COL_BATCH_SIZE)
-    ](d_genotypes, d_phenotypes, num_layers, use_growth, activation)
+    ](d_growth_genotypes, d_state_genotypes, d_phenotypes, num_layers, base_layer, below_start, around_start, above_start, use_growth, activation)
 
     # Copy output data from device memory to host memory.
     phenotypes = d_phenotypes.copy_to_host()
@@ -314,7 +339,7 @@ def simulate(genotypes, num_layers, use_growth, phenotypes, activation):
     # granularity of 2x2.
     assert all(check_granularity(2, p)
                for p in np.reshape(
-                   phenotypes[:, :, 1], (-1, WORLD_SIZE, WORLD_SIZE)))
+                   phenotypes[:, :, 1], (-1, WORLD_SIZE, WORLD_SIZE))) 
 
     # Layer2 in all phenotypes from all steps of the simulation has a
     # granularity of 4x4.

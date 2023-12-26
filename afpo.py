@@ -14,17 +14,20 @@ activation2int = {
 
 @functools.total_ordering # Sortable by fitness
 class Solution:
-    def __init__(self, n_layers=3):
-        self.n_layers = n_layers
+    def __init__(self, layers):
+        self.layers = layers
+        self.n_layers = len(self.layers)
+        self.base_layer = next((i for i, d in enumerate(self.layers) if d.get('base', False)), None)
         self.age = 0
         self.been_simulated = False
         self.fitness = None
         self.phenotype = None
-        self.genotype = self.randomize_genome()
+        self.randomize_genome()
 
     def make_offspring(self):
-        child = Solution(n_layers=self.n_layers)
-        child.genotype = child.genotype.copy()
+        child = Solution(layers=self.layers)
+        child.state_genotype = child.state_genotype.copy()
+        child.growth_genotype = child.growth_genotype.copy()
         child.mutate()
         return child
 
@@ -67,18 +70,58 @@ class Solution:
             self.fitness < other.fitness
         ])
 
+    def get_layer_n_params(self, l):
+        n_above = 0 if l == (self.n_layers-1) else 1
+        n_below = 0 if l == 0 else (self.layers[l]['res'] / self.layers[l-1]['res'])**2
+        n_around = 9 # Moore neighborhood
+        return n_below, n_around, n_above
+
+    def get_layer_state_indices(self, l):
+        n_above = 0 if l == (self.n_layers-1) else 1
+        n_below = 0 if l == 0 else int((self.layers[l]['res'] / self.layers[l-1]['res'])**2)
+        n_around = 9 # Moore neighborhood
+
+        return ((0,n_below), (n_below, n_below+n_around), (n_below+n_around, n_below+n_around+n_above))
+
     def randomize_genome(self):
-        # Randomly initialize the NN weights (3 layers, input neurons, output neurons)
-        genotype = np.random.random((NUM_LAYERS, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS)).astype(np.float32) * 2 - 1
-        # Mask weights
-        for l in range(NUM_LAYERS):
-            if l < self.n_layers:
-                genotype[l] *= get_layer_mask(l)
-            else:
-                genotype[l] *= np.zeros(genotype[l].shape)
-        
-        self.total_weights = np.sum(genotype != 0)
-        return genotype
+        max_below = max([self.get_layer_n_params(l)[0] for l in range(self.n_layers)])
+        max_around = max([self.get_layer_n_params(l)[1] for l in range(self.n_layers)])
+        max_above = max([self.get_layer_n_params(l)[2] for l in range(self.n_layers)])
+
+        # Starting indices for neighborhood and above parameters
+        self.around_start = max_below
+        self.above_start = max_below + max_around
+
+        total_param_space = max_above + max_around + max_below
+        self.state_genotype = np.random.random((self.n_layers, total_param_space)).astype(np.float32) * 2 - 1
+        self.growth_genotype = np.random.random(4, total_param_space).astype(np.float32) * 2 - 1
+
+        # Mask growth genome
+        if self.base_layer == 0: # Mask away below if base layer is layer 0
+            self.growth_genotype[0:self.around_start, :] = 0
+        if self.base_layer == (self.n_layers - 1):
+            self.growth_genotype[self.above_start:, :] = 0
+
+        # Mask state genome
+
+
+
+    def randomize_growth_genome(self):
+        size = self.get_layer_n_params(self.base_layer)
+        self.growth_genotype = np.random.random((size, 4)).astype(np.float32) * 2 - 1 # 4 for up,down,left,right spread
+
+    def randomize_state_genome(self):
+        self.state_genotype = np.random.random((self.n_layers, max([self.get_layer_n_params(l) for l in range(self.n_layers)]))).astype(np.float32) * 2 - 1
+        self.state_genotype_mask = np.zeros_like(self.state_genotype)
+        for l in range(self.n_layers):
+            below_index_range, neighborhood_index_range, above_index_range = self.get_layer_state_indices(l)
+            print(l, below_index_range, neighborhood_index_range, above_index_range)
+            self.state_genotype_mask[l, below_index_range[0]:below_index_range[1]] = 1
+            self.state_genotype_mask[l, neighborhood_index_range[0]:neighborhood_index_range[1]] = 1
+            self.state_genotype_mask[l, above_index_range[0]:above_index_range[1]] = 1
+
+        self.state_genotype *= self.state_genotype_mask
+
 
 class AgeFitnessPareto:
     def __init__(self, experiment_constants):
@@ -87,7 +130,9 @@ class AgeFitnessPareto:
         self.layers = experiment_constants['layers']
         self.use_growth = experiment_constants['use_growth']
         self.activation = experiment_constants['activation']
-        self.fitness_threshold = experiment_constants['fitness_threshold']
+
+        self.n_layers = len(self.layers)
+        self.base_layer = next((i for i, d in enumerate(self.layers) if d.get('base', False)), None)
         self.population = []
         self.current_generation = 1
 
@@ -107,12 +152,21 @@ class AgeFitnessPareto:
         start = time.perf_counter()
 
         init_phenotypes = self.make_seed_phenotypes()
-        unsimulated_genotypes, unsimulated_indices = self.get_unsimulated_genotypes()
+        unsimulated_growth_genotypes, unsimulated_state_genotypes, unsimulated_indices = self.get_unsimulated_genotypes()
         
         ##### SIMULATE ON GPUs #####
         print(f'Starting {self.target_population_size} simulations...')
         phenotypes = simulate(
-            unsimulated_genotypes, self.layers, self.use_growth, init_phenotypes, activation2int[self.activation])
+            unsimulated_growth_genotypes, 
+            unsimulated_state_genotypes, 
+            self.n_layers, 
+            self.base_layer, 
+            below_start, 
+            around_start, 
+            above_start, 
+            self.use_growth, 
+            init_phenotypes, 
+            activation2int[self.activation])
 
         elapsed = time.perf_counter() - start
         lps = self.target_population_size / elapsed
@@ -126,7 +180,9 @@ class AgeFitnessPareto:
             # self.population[idx].set_phenotype(phenotypes[i])
 
         print('Average fitness:',
-              np.mean([sol.fitness for sol in self.population]))
+              np.mean([sol.fitness for sol in self.population]),
+              ', Max fitness: ',
+              max([sol.fitness for sol in self.population]))
         print('Average age:',
               np.mean([sol.age for sol in self.population]))
         # Reduce the population
@@ -181,14 +237,17 @@ class AgeFitnessPareto:
 
     def get_unsimulated_genotypes(self):
         # Filter out just the genotypes that haven't been simulated yet.
-        unsimulated_genotypes = [
-            sol.genotype for sol in self.population if not sol.been_simulated
+        unsimulated_growth_genotypes = [
+            sol.growth_genotype for sol in self.population if not sol.been_simulated
+        ]
+        unsimulated_state_genotypes = [
+            sol.state_genotype for sol in self.population if not sol.been_simulated
         ]
         unsimulated_indices = [
             i for i, sol in enumerate(self.population) if not sol.been_simulated
         ]
         # Aggregate the genotypes into a single matrix for simulation
-        return np.array(unsimulated_genotypes, dtype=np.float32), unsimulated_indices
+        return np.array(unsimulated_growth_genotypes, dtype=np.float32), np.array(unsimulated_state_genotypes, dtype=np.float32), unsimulated_indices
 
 
     def evaluate_phenotypes(self, phenotypes):
@@ -199,7 +258,7 @@ class AgeFitnessPareto:
         # Infer pop_size from phenotypes
         pop_size = phenotypes.shape[0]
         # All phenotypes and the target image are WORLD_SIZE x WORLD_SIZE squares.
-        assert phenotypes.shape == (pop_size, NUM_STEPS, NUM_LAYERS, WORLD_SIZE, WORLD_SIZE)
+        assert phenotypes.shape == (pop_size, NUM_STEPS, self.n_layers, WORLD_SIZE, WORLD_SIZE)
         assert target.shape == (WORLD_SIZE, WORLD_SIZE)
 
         # Allocate space for results.
@@ -210,7 +269,7 @@ class AgeFitnessPareto:
             # Look at just the final state of the layer0 part of the phenotype.
             # Compare it to the target image, and sum up the deltas to get the
             # final fitness score (lower is better, 0 is a perfect score).
-            fitness_scores[i] = np.sum(np.abs(target - (phenotypes[i][-1][0] > self.fitness_threshold)))
+            fitness_scores[i] = np.sum(np.abs(target - (phenotypes[i][-1][self.base_layer] > 0)))
 
         return fitness_scores
 
@@ -225,14 +284,16 @@ class AgeFitnessPareto:
         # 1 and 2 are conceptually smaller than layer0 (1/4 and 1/8 respectively),
         # but are represented using arrays of the same size for simplicity.
         phenotypes = np.full(
-            (self.target_population_size, NUM_STEPS, NUM_LAYERS, WORLD_SIZE, WORLD_SIZE),
+            (self.target_population_size, NUM_STEPS, self.n_layers, WORLD_SIZE, WORLD_SIZE),
             DEAD, dtype=np.float32)
+        
+        middle_start = WORLD_SIZE // 2
+        middle_end = middle_start + self.layers[self.base_layer]['res']
 
         # Use a single ALIVE pixel in the middle of the CA world as the initial
         # phenotype state for all individuals in the population.
         for i in range(self.target_population_size):
-            middle = WORLD_SIZE // 2
-            phenotypes[i][0][0][middle][middle] = ALIVE
+            phenotypes[i][0][self.base_layer][middle_start:middle_end][middle_start:middle_end] = ALIVE
 
         return phenotypes
 
