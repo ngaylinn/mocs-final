@@ -52,6 +52,10 @@ RIGHT_SPREAD_WEIGHTS_COL_IDX = 2
 UP_SPREAD_WEIGHTS_COL_IDX = 3
 DOWN_SPREAD_WEIGHTS_COL_IDX = 4
 
+ACTIVATION_SIGMOID = 0
+ACTIVATION_TANH = 1
+ACTIVATION_RELU = 2
+
 
 @cuda.jit
 def activate_sigmoid(weighted_sum):
@@ -209,11 +213,11 @@ def update_cell(layer, use_growth, phenotypes, genotypes, pop_idx, step, row, co
             phenotypes[pop_idx][step][layer][((row+1) % WORLD_SIZE)][(col % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
 
     # Actually update the phenotype state for step on layer1 at (row, col).
-    if activation == 'sigmoid':
+    if activation == ACTIVATION_SIGMOID:
         phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
-    elif activation == 'tanh':
+    elif activation == ACTIVATION_TANH:
         phenotypes[pop_idx][step][layer][row][col] = activate_tanh(signal_sum)
-    elif activation == 'relu':
+    elif activation == ACTIVATION_RELU:
         phenotypes[pop_idx][step][layer][row][col] = activate_relu(signal_sum)
         
 
@@ -262,7 +266,7 @@ def check_granularity(g, image):
     return np.array_equal(image, scaled_up)
 
 
-def simulate(genotypes, num_layers, use_growth, phenotypes, activation='sigmoid'):
+def simulate(genotypes, num_layers, use_growth, phenotypes, activation):
     """Simulate genotypes and return phenotype videos."""
 
     # Infer population size from genotypes
@@ -280,9 +284,10 @@ def simulate(genotypes, num_layers, use_growth, phenotypes, activation='sigmoid'
     # MAX_THREADS_PER_BLOCK threads, which should mean that whole warps fall
     # out of the computation together.
     assert type(num_layers) is int
-    assert num_layers in range(NUM_LAYERS)
+    assert num_layers in range(NUM_LAYERS + 1)
 
     assert type(use_growth) is bool
+    assert type(activation) is int
 
     assert phenotypes.shape == (
         pop_size, NUM_STEPS, NUM_LAYERS, WORLD_SIZE, WORLD_SIZE)

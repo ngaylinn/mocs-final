@@ -4,7 +4,13 @@ import pickle
 
 import numpy as np
 
-from simulation import simulate, get_layer_mask, DEAD, ALIVE, WORLD_SIZE, NUM_STEPS, NUM_LAYERS, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS
+from simulation import simulate, get_layer_mask, DEAD, ALIVE, WORLD_SIZE, NUM_STEPS, NUM_LAYERS, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS, ACTIVATION_SIGMOID, ACTIVATION_RELU, ACTIVATION_TANH
+
+activation2int = {
+    'sigmoid': ACTIVATION_SIGMOID,
+    'tanh': ACTIVATION_TANH,
+    'relu': ACTIVATION_RELU
+}
 
 @functools.total_ordering # Sortable by fitness
 class Solution:
@@ -105,7 +111,7 @@ class AgeFitnessPareto:
         ##### SIMULATE ON GPUs #####
         print(f'Starting {self.target_population_size} simulations...')
         phenotypes = simulate(
-            unsimulated_genotypes, self.layers, self.use_growth, init_phenotypes, self.activation)
+            unsimulated_genotypes, self.layers, self.use_growth, init_phenotypes, activation2int[self.activation])
 
         elapsed = time.perf_counter() - start
         lps = self.target_population_size / elapsed
