@@ -87,7 +87,6 @@ class AgeFitnessPareto:
         self.layers = experiment_constants['layers']
         self.use_growth = experiment_constants['use_growth']
         self.activation = experiment_constants['activation']
-        self.fitness_threshold = experiment_constants['fitness_threshold']
         self.population = []
         self.current_generation = 1
 
@@ -210,7 +209,7 @@ class AgeFitnessPareto:
             # Look at just the final state of the layer0 part of the phenotype.
             # Compare it to the target image, and sum up the deltas to get the
             # final fitness score (lower is better, 0 is a perfect score).
-            fitness_scores[i] = np.sum(np.abs(target - (phenotypes[i][-1][0] > self.fitness_threshold)))
+            fitness_scores[i] = np.sum(np.abs(target - (phenotypes[i][-1][0] > 0)))
 
         return fitness_scores
 
