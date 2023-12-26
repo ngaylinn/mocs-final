@@ -89,12 +89,12 @@ class Solution:
         max_above = max([self.get_layer_n_params(l)[2] for l in range(self.n_layers)])
 
         # Starting indices for neighborhood and above parameters
-        self.around_start = max_below
-        self.above_start = max_below + max_around
+        self.around_start = int(max_below)
+        self.above_start = int(max_below + max_around)
 
-        total_param_space = max_above + max_around + max_below
+        total_param_space = int(max_above + max_around + max_below)
         self.state_genotype = np.random.random((self.n_layers, total_param_space)).astype(np.float32) * 2 - 1
-        self.growth_genotype = np.random.random(4, total_param_space).astype(np.float32) * 2 - 1
+        self.growth_genotype = np.random.random((4, total_param_space)).astype(np.float32) * 2 - 1
 
         # Mask growth genome
         if self.base_layer == 0: # Mask away below if base layer is layer 0
@@ -160,10 +160,9 @@ class AgeFitnessPareto:
             unsimulated_growth_genotypes, 
             unsimulated_state_genotypes, 
             self.n_layers, 
-            self.base_layer, 
-            below_start, 
-            around_start, 
-            above_start, 
+            self.base_layer,  
+            self.population[0].around_start, 
+            self.population[0].above_start, 
             self.use_growth, 
             init_phenotypes, 
             activation2int[self.activation])
@@ -199,7 +198,7 @@ class AgeFitnessPareto:
     def initialize_population(self):
         # Initialize target_population_size random solutions
         self.population = [
-            Solution(n_layers=self.layers) for _ in range(self.target_population_size)
+            Solution(layers=self.layers) for _ in range(self.target_population_size)
         ]
 
     def extend_population(self):
