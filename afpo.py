@@ -47,11 +47,17 @@ class Solution:
         return self.fitness
 
     def mutate(self):
-        random_layer = np.random.choice(range(NUM_LAYERS), p=[np.sum(l != 0)/self.total_weights for l in self.genotype])
-        random_nonzero_indices = np.transpose(np.nonzero(self.genotype[random_layer]))
-        r, c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))]
+        mutate_growth_weight = np.random.choice([0, 1], p=[self.state_n_weights / self.total_weights, self.growth_n_weights / self.total_weights])
 
-        self.genotype[random_layer, r, c] = np.random.random() * 2 - 1
+        if mutate_growth_weight:
+            random_nonzero_indices = np.transpose(np.nonzero(self.growth_genotype))
+            r, c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))]
+            self.growth_genotype[r, c] = np.random.random() * 2 - 1
+        else:
+            random_nonzero_indices = np.transpose(np.nonzero(self.state_genotype))
+            r, c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))]
+            self.state_genotype[r, c] = np.random.random() * 2 - 1
+
 
     def dominates(self, other):
         return all([self.age <= other.age, self.fitness <= other.fitness])
@@ -98,12 +104,17 @@ class Solution:
 
         # Mask growth genome
         if self.base_layer == 0: # Mask away below if base layer is layer 0
-            self.growth_genotype[0:self.around_start, :] = 0
+            self.growth_genotype[:, 0:self.around_start] = 0
         if self.base_layer == (self.n_layers - 1):
-            self.growth_genotype[self.above_start:, :] = 0
+            self.growth_genotype[:, self.above_start:] = 0
 
         # Mask state genome
+        self.state_genotype[0, 0:self.around_start] = 0
+        self.state_genotype[self.n_layers-1, self.above_start:] = 0
 
+        self.state_n_weights = np.count_nonzero(self.state_genotype)
+        self.growth_n_weights = np.count_nonzero(self.growth_genotype)
+        self.total_weights = self.state_n_weights + self.growth_n_weights
 
 
     def randomize_growth_genome(self):
@@ -133,6 +144,7 @@ class AgeFitnessPareto:
 
         self.n_layers = len(self.layers)
         self.base_layer = next((i for i, d in enumerate(self.layers) if d.get('base', False)), None)
+        print(self.base_layer)
         self.population = []
         self.current_generation = 1
 
@@ -180,8 +192,8 @@ class AgeFitnessPareto:
 
         print('Average fitness:',
               np.mean([sol.fitness for sol in self.population]),
-              ', Max fitness: ',
-              max([sol.fitness for sol in self.population]))
+              ', Min fitness: ',
+              min([sol.fitness for sol in self.population]))
         print('Average age:',
               np.mean([sol.age for sol in self.population]))
         # Reduce the population
@@ -213,7 +225,7 @@ class AgeFitnessPareto:
         self.population += new_individuals
 
         # Add a single random individual
-        self.population.append(Solution(n_layers=self.layers))
+        self.population.append(Solution(layers=self.layers))
 
     def reduce_population(self):
         # Remove individuals until target population is reached
@@ -292,7 +304,7 @@ class AgeFitnessPareto:
         # Use a single ALIVE pixel in the middle of the CA world as the initial
         # phenotype state for all individuals in the population.
         for i in range(self.target_population_size):
-            phenotypes[i][0][self.base_layer][middle_start:middle_end][middle_start:middle_end] = ALIVE
+            phenotypes[i][0][self.base_layer][middle_start:middle_end, middle_start:middle_end] = ALIVE
 
         return phenotypes
 
