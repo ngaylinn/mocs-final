@@ -144,7 +144,6 @@ class AgeFitnessPareto:
 
         self.n_layers = len(self.layers)
         self.base_layer = next((i for i, d in enumerate(self.layers) if d.get('base', False)), None)
-        print(self.base_layer)
         self.population = []
         self.current_generation = 1
 
