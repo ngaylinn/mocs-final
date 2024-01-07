@@ -268,13 +268,16 @@ class AgeFitnessPareto:
         """
 
         resolution = self.layers[self.base_layer]['res']
+        target_size = WORLD_SIZE // resolution
 
         assert resolution in [2**n for n in range(int(np.log2(WORLD_SIZE)) + 1)]
 
         if self.shape == 'square':
-            target = create_square(resolution)
+            target = create_square(target_size)
         elif self.shape == 'diamond':
-            target = create_diamond(resolution)
+            target = create_diamond(target_size)
+        elif self.shape == 'circle':
+            target = create_circle(target_size)
 
         # Upsize back to 64x64 because that's how we're comparing 
         while target.shape[0] < 64: 

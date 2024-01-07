@@ -1,18 +1,37 @@
 import numpy as np
 
-def create_circle_array(N):
+def create_hollow_circle(N):
+    if N <= 6 or N % 2 != 0:
+        raise ValueError("N must be an even number greater than 6")
+
     # Create an N x N array of zeros
     array = np.zeros((N, N))
 
-    # Calculate the center and radius of the circle
-    center = (N // 2, N // 2)
-    radius = N // 3 
+    # Calculate the 2x2 center square and the radius
+    center_x1 = N // 2 - 1
+    center_y1 = N // 2 - 1
+    center_x2 = N // 2
+    center_y2 = N // 2
+
+    radius_outer = N // 3
+    radius_inner = N // 5
 
     # Fill the array with a circle of ones
     for y in range(N):
         for x in range(N):
-            if (x - center[0])**2 + (y - center[1])**2 < radius**2:
+            if ((x - center_x1)**2 + (y - center_y1)**2 < radius_outer**2 or
+                (x - center_x2)**2 + (y - center_y1)**2 < radius_outer**2 or
+                (x - center_x1)**2 + (y - center_y2)**2 < radius_outer**2 or
+                (x - center_x2)**2 + (y - center_y2)**2 < radius_outer**2):
                 array[y, x] = 1
+
+    for y in range(N):
+        for x in range(N):
+            if ((x - center_x1)**2 + (y - center_y1)**2 < radius_inner**2 or
+                (x - center_x2)**2 + (y - center_y1)**2 < radius_inner**2 or
+                (x - center_x1)**2 + (y - center_y2)**2 < radius_inner**2 or
+                (x - center_x2)**2 + (y - center_y2)**2 < radius_inner**2):
+                array[y, x] = 0
 
     return array
 
