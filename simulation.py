@@ -305,7 +305,7 @@ def simulate(growth_genotypes, state_genotypes, num_layers, base_layer, around_s
     return phenotypes
 
 
-def make_seed_phenotypes(pop_size):
+def make_seed_phenotypes(pop_size, n_layers=3):
     """Starting phenotypes to use by default (one ALIVE cell in middle)."""
     # For each inidividual, capture phenotype development over NUM_STEPS. Each
     # phenotype has NUM_LAYERS layers which are all WORLD_SIZE x WORLD_SIZE
@@ -314,7 +314,7 @@ def make_seed_phenotypes(pop_size):
     # 1 and 2 are conceptually smaller than layer0 (1/4 and 1/8 respectively),
     # but are represented using arrays of the same size for simplicity.
     phenotypes = np.full(
-        (pop_size, NUM_STEPS, NUM_LAYERS, WORLD_SIZE, WORLD_SIZE),
+        (pop_size, NUM_STEPS, n_layers, WORLD_SIZE, WORLD_SIZE),
         DEAD, dtype=np.float32)
 
     # Use a single ALIVE pixel in the middle of the CA world as the initial

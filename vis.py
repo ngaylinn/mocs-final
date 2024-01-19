@@ -6,16 +6,24 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
-from afpo import Solution
+from afpo import Solution, activation2int
 from simulation import simulate, make_seed_phenotypes, DEAD, ALIVE
 
 
 def simulate_one_individual(solution : Solution):
-    genotypes = np.array([solution.genotype]) 
-    layers = np.array([2], dtype=np.uint8)
-    phenotypes = make_seed_phenotypes(1)
+    init_phenotypes = make_seed_phenotypes(1)
+    print(solution.n_layers)
 
-    phenotypes = simulate(genotypes, layers, phenotypes)
+    phenotypes = simulate(
+            np.array([solution.growth_genotype]), 
+            np.array([solution.state_genotype]), 
+            solution.n_layers, 
+            solution.base_layer,  
+            solution.around_start, 
+            solution.above_start, 
+            True, 
+            init_phenotypes, 
+            0) # sigmoid default currently 
     
     return phenotypes[0]
 
@@ -128,5 +136,8 @@ if __name__ == '__main__':
     with open(experiment_pkl, 'rb') as pf:
         exp = pickle.load(pf)
 
-    exp_best_phenotype = simulate_one_individual(exp.best_solution())
-    visualize_all_layers(exp_best_phenotype, 'control_best_all_layers_1.gif')
+    print(exp.shape)
+    print(exp.get_target_shape())
+
+    # exp_best_phenotype = simulate_one_individual(exp.best_solution())
+    # visualize_all_layers(exp_best_phenotype, 'control_best_all_layers_1.gif')
