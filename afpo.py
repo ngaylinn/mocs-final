@@ -78,8 +78,8 @@ class Solution:
         ])
 
     def get_layer_n_params(self, l):
-        n_above = 0 if l == (self.n_layers-1) else 1
-        n_below = 0 if l == 0 else (self.layers[l]['res'] / self.layers[l-1]['res'])**2
+        n_above = 0 if l == (self.n_layers-1) else 1 # Always true
+        n_below = 0 if l == 0 else (self.layers[l]['res'] / self.layers[l-1]['res'])**2 
         n_around = 9 # Moore neighborhood
         return n_below, n_around, n_above
 
@@ -91,6 +91,10 @@ class Solution:
         return ((0,n_below), (n_below, n_below+n_around), (n_below+n_around, n_below+n_around+n_above))
 
     def randomize_genome(self):
+        '''
+        The "state genome" is the weights relevant to the updating of the current cell's state
+        The "growth genome" contains weights relevant to spreading to neighbors
+        '''
         max_below = max([self.get_layer_n_params(l)[0] for l in range(self.n_layers)])
         max_around = max([self.get_layer_n_params(l)[1] for l in range(self.n_layers)])
         max_above = max([self.get_layer_n_params(l)[2] for l in range(self.n_layers)])
