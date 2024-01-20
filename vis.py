@@ -1,5 +1,6 @@
 import pickle
 import time
+import os
 import argparse
 
 import matplotlib.pyplot as plt
@@ -11,7 +12,7 @@ from simulation import simulate, make_seed_phenotypes, DEAD, ALIVE
 
 
 def simulate_one_individual(solution : Solution):
-    init_phenotypes = make_seed_phenotypes(1)
+    init_phenotypes = make_seed_phenotypes(1, n_layers=solution.n_layers)
     print(solution.n_layers)
 
     phenotypes = simulate(
@@ -27,14 +28,16 @@ def simulate_one_individual(solution : Solution):
     
     return phenotypes[0]
 
-def visualize_all_layers(phenotype, filename):
+def visualize_all_layers(phenotype, filename, base_layer_idx=0):
     def make_frame(frame_data):
-        layer0, layer1, layer2 = frame_data
-        l, w = layer0.shape
+        n_layers, l, w = frame_data.shape
+        
+        base_layer = frame_data[base_layer_idx]
+
         base = np.array(
             np.bitwise_or(
-                (layer0 != DEAD) * 0xffffffff,   # DEAD cells are black
-                (layer0 == DEAD) * 0xff000000), # ALIVE cells are white
+                (base_layer != DEAD) * 0xffffffff,   # DEAD cells are black
+                (base_layer == DEAD) * 0xff000000), # ALIVE cells are white
             dtype=np.uint32)
 
         # Calculate the total width for the new image
@@ -43,17 +46,14 @@ def visualize_all_layers(phenotype, filename):
         # Create a new image with the calculated total width
         combined_image = Image.new('RGBA', (total_width, l))
 
+        # Base layer first
+        base_img = Image.fromarray(base, mode='RGBA')
+        combined_image.paste(base_img, (0, 0))
+
         # Convert layers to images
-        image0 = Image.fromarray(base, mode='RGBA')
-        image1 = Image.fromarray(layer0, mode='RGBA')
-        image2 = Image.fromarray(layer1, mode='RGBA')
-        image3 = Image.fromarray(layer2, mode='RGBA')
-        
-        # Paste each image side by side in the combined image
-        combined_image.paste(image0, (0, 0))
-        combined_image.paste(image1, (w, 0))
-        combined_image.paste(image2, (w * 2, 0))
-        combined_image.paste(image3, (w * 3, 0))
+        for layer in range(n_layers):
+            img = Image.fromarray(frame_data[layer], mode='RGBA')
+            combined_image.paste(img, ((layer+1) * w, 0))
 
         return combined_image
 
@@ -171,10 +171,14 @@ if __name__ == '__main__':
     with open(experiment_pkl, 'rb') as pf:
         exp = pickle.load(pf)
 
-    print(exp.shape)
-    print(exp.get_target_shape())
+    # print(exp.shape)
+    # print(exp.get_target_shape())
 
     # exp_best_phenotype = simulate_one_individual(exp.best_solution())
     # visualize_all_layers(exp_best_phenotype, 'control_best_all_layers_1.gif')
     exp_best_phenotype = simulate_one_individual(exp.best_solution())
-    visualize_all_layers(exp_best_phenotype, f'{args.exp}.png')
+    save_folder = '/'.join(args.exp.split('/')[:-2]) + '/vis'
+    file_name = args.exp.split('/')[-1]
+    os.makedirs(f'{save_folder}', exist_ok=True)
+
+    visualize_all_layers(exp_best_phenotype, f'{save_folder}/{file_name}.gif', base_layer_idx=exp.base_layer)
