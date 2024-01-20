@@ -128,9 +128,9 @@ def look_around(layer, phenotypes, genotypes, around_weights_start, pop_idx, ste
 
 
 @cuda.jit
-def look_up(layer, phenotypes, genotypes, growth, up_weights_start, pop_idx, step, row, col):
+def look_up(num_layers, layer, phenotypes, genotypes, growth, up_weights_start, pop_idx, step, row, col):
     """Compute the weighted sum of this cell's neighbors in the layer above."""
-    if layer == NUM_LAYERS and growth == 0:
+    if layer == num_layers - 1 and growth == 0:
         return 0
     # Look at just the single neighbor in the next layer up.
     neighbor_state = phenotypes[pop_idx][step-1][layer+1][row][col]
@@ -162,13 +162,13 @@ def get_spread_update(layer, phenotypes, growth_genotypes, around_start, above_s
 
 
 @cuda.jit
-def update_cell(layer, use_growth, phenotypes, growth_genotypes, state_genotypes, base_layer, around_start, above_start, pop_idx, step, row, col, activation):
+def update_cell(num_layers, layer, use_growth, phenotypes, growth_genotypes, state_genotypes, base_layer, around_start, above_start, pop_idx, step, row, col, activation):
     """Compute the next state for a single cell in layer0 from prev states."""
 
     # Calculate the weighted sum of all neighbors.
     down_signal_sum = look_down(layer, phenotypes, state_genotypes, 0, 0, pop_idx, step, row, col) # Should return 0 for L=0
     around_signal_sum = look_around(layer, phenotypes, state_genotypes, around_start, pop_idx, step, row, col) 
-    up_signal_sum = look_up(layer, phenotypes, state_genotypes, 0, above_start, pop_idx, step, row, col)
+    up_signal_sum = look_up(num_layers, layer, phenotypes, state_genotypes, 0, above_start, pop_idx, step, row, col)
 
     signal_sum = down_signal_sum + around_signal_sum + up_signal_sum
 
@@ -213,7 +213,7 @@ def simulation_kernel(growth_genotypes, state_genotypes, phenotypes, num_layers,
         for col in range(start_col, start_col + COLS_PER_THREAD):
             # Update the state in every layer this individual uses.
             for layer in range(0, num_layers):
-                update_cell(layer, use_growth, phenotypes, growth_genotypes, state_genotypes, base_layer, around_start, above_start, pop_idx, step, row, col, activation)
+                update_cell(num_layers, layer, use_growth, phenotypes, growth_genotypes, state_genotypes, base_layer, around_start, above_start, pop_idx, step, row, col, activation)
         # Make sure all threads have finished computing this step before going
         # on to the next one.
         cuda.syncthreads()
