@@ -85,7 +85,7 @@ def visualize_one_layer(phenotype, filename, layer=0):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('exp', type=str)
-options = parser.parse_args()
+args = parser.parse_args()
 
 experiment_pkl = args.exp
 
