@@ -103,6 +103,22 @@ def look_down(layer, phenotypes, genotypes, growth, down_weights_start, pop_idx,
 
 
 @cuda.jit
+def look_down_control(layer, phenotypes, genotypes, growth, down_weights_start, pop_idx, step, row, col):
+    """Compute the weighted sum of this cell's neighbors in the layer below."""
+    if layer == 0 and growth == 0:
+        return 0
+
+    weight_index = down_weights_start
+    result = 0
+
+    neighbor_state = phenotypes[pop_idx][step-1][layer-1][row][col]
+    weight = genotypes[pop_idx, layer][weight_index]
+    result += neighbor_state * weight
+
+    return result
+
+
+@cuda.jit
 def look_around(layer, phenotypes, genotypes, around_weights_start, pop_idx, step, row, col):
     """Compute the weighted sum of this cell's neighbors in this layer."""
     # The "granularity" of this layer. Layer0 == 1, layer1 == 2, layer2 == 4.
@@ -126,6 +142,29 @@ def look_around(layer, phenotypes, genotypes, around_weights_start, pop_idx, ste
             weight_index += 1
     return result
 
+@cuda.jit
+def look_around_control(layer, phenotypes, genotypes, around_weights_start, pop_idx, step, row, col):
+    """Compute the weighted sum of this cell's neighbors in this layer."""
+    # The "granularity" of this layer. Layer0 == 1, layer1 == 2, layer2 == 4.
+    g = 1 # << layer
+
+    weight_index = around_weights_start
+    result = 0
+    # Look at a Moore neighborhood around (row, col) in the current layer.
+    for r in range(row-g, row+g+1, g):
+        for c in range(col-g, col+g+1, g):
+            # Do wrap-around bounds checking. This may be inefficient, since
+            # we're doing extra modulus operations and working on
+            # non-contiguous memory may prevent coallesced reads. However, it's
+            # simple, and avoids complications when working with different
+            # granularities.
+            r = r % WORLD_SIZE
+            c = c % WORLD_SIZE
+            neighbor_state = phenotypes[pop_idx][step-1][layer][r][c]
+            weight = genotypes[pop_idx, layer][weight_index]
+            result += neighbor_state * weight
+            weight_index += 1
+    return result
 
 @cuda.jit
 def look_up(layer, phenotypes, genotypes, growth, up_weights_start, pop_idx, step, row, col):
@@ -138,22 +177,22 @@ def look_up(layer, phenotypes, genotypes, growth, up_weights_start, pop_idx, ste
     return neighbor_state * weight
 
 @cuda.jit
-def get_spread_update(phenotypes, growth_genotypes, around_start, above_start, pop_idx, step, row, col):
-    up_spread_weighted_sum = look_up(0, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
-    up_spread_weighted_sum += look_around(0, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
-    up_spread_weighted_sum += look_down(0, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
+def get_spread_update(layer, phenotypes, growth_genotypes, around_start, above_start, pop_idx, step, row, col):
+    up_spread_weighted_sum = look_up(layer, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
+    up_spread_weighted_sum += look_around_control(layer, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
+    up_spread_weighted_sum += look_down_control(layer, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
     
-    down_spread_weighted_sum = look_up(1, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
-    down_spread_weighted_sum += look_around(1, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
-    down_spread_weighted_sum += look_down(1, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
+    down_spread_weighted_sum = look_up(layer, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
+    down_spread_weighted_sum += look_around_control(layer, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
+    down_spread_weighted_sum += look_down_control(layer, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
     
-    left_spread_weighted_sum = look_up(2, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
-    left_spread_weighted_sum += look_around(2, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
-    left_spread_weighted_sum += look_down(2, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
+    left_spread_weighted_sum = look_up(layer, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
+    left_spread_weighted_sum += look_around_control(layer, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
+    left_spread_weighted_sum += look_down_control(layer, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
     
-    right_spread_weighted_sum = look_up(3, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
-    right_spread_weighted_sum += look_around(3, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
-    right_spread_weighted_sum += look_down(3, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
+    right_spread_weighted_sum = look_up(layer, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
+    right_spread_weighted_sum += look_around_control(layer, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
+    right_spread_weighted_sum += look_down_control(layer, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
 
     return (left_spread_weighted_sum > 0,
         right_spread_weighted_sum > 0,
@@ -176,7 +215,7 @@ def update_cell(layer, use_growth, phenotypes, growth_genotypes, state_genotypes
     alive = phenotypes[pop_idx][step][layer][row][col] != 0
     if layer == base_layer and alive and use_growth:
         # Spread to nearby cells... is this necessary?
-        (left, right, up, down) = get_spread_update(phenotypes, growth_genotypes, around_start, above_start, pop_idx, step, row, col)
+        (left, right, up, down) = get_spread_update(base_layer, phenotypes, growth_genotypes, around_start, above_start, pop_idx, step, row, col)
                 
         if left:
             phenotypes[pop_idx][step][layer][(row % WORLD_SIZE)][((col-1) % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
