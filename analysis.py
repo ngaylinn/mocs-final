@@ -38,7 +38,6 @@ def plot_average_fitness(folders, label_names):
 
     plt.xlabel('Generation')
     plt.ylabel('Average Loss')
-    plt.ylim(250, 1050)
     plt.legend()
     plt.gcf().set_size_inches(10, 8)  # Increase plot size
     plt.savefig(f'fitness_curve_{label_names[0]}_vs_{label_names[1]}.png')
@@ -63,7 +62,6 @@ def strip_plot(folders, label_names):
     ax.set_xticks(np.arange(len(label_names)))
     ax.set_xticklabels(label_names)
     plt.ylabel('Minimum Loss')
-    plt.ylim(250, 1050)
     plt.gcf().set_size_inches(10, 8)  # Increase plot size
     plt.savefig(f'strip_plot_{label_names[0]}_vs_{label_names[1]}.png')
     plt.show()
@@ -92,20 +90,20 @@ def box_plot(folders, label_names):
 
 
 # Define datasets
-layers_3_growth_true = 'experiments/growth-exp/Control'
-layers_3_growth_false = 'experiments/growth-exp/Experiment'
+# layers_3_growth_true = 'experiments/growth-exp/Control'
+# layers_3_growth_false = 'experiments/growth-exp/Experiment'
 
-layers_2_growth_true = 'experiments/two_layers/Two_Layers'
+# layers_2_growth_true = 'experiments/two_layers/Two_Layers'
 
-layers_1_growth_true = 'experiments/one_layer/Experiment'
-layers_1_growth_false = 'experiments/one_layer/Control'
+# layers_1_growth_true = 'experiments/one_layer/Experiment'
+# layers_1_growth_false = 'experiments/one_layer/Control'
 
-layers_1_growth = 'experiments/exp_1layer_growth/experiment'
-layers_2_growth = 'experiments/exp_2layer_growth/experiment'
-layers_3_growth = 'experiments/exp_3layer_growth/experiment'
+# layers_1_growth = 'experiments/exp_1layer_growth/experiment'
+# layers_2_growth = 'experiments/exp_2layer_growth/experiment'
+# layers_3_growth = 'experiments/exp_3layer_growth/experiment'
 
-plot_average_fitness([layers_3_growth, layers_2_growth, layers_1_growth], ['3 Layers, Growth', '2 Layers, Growth','1 Layer, Growth'])
-strip_plot([layers_3_growth, layers_2_growth, layers_1_growth], ['3 Layers \n Growth', '2 Layers \n Growth','1 Layer \n Growth'])
+# plot_average_fitness([layers_3_growth, layers_2_growth, layers_1_growth], ['3 Layers, Growth', '2 Layers, Growth','1 Layer, Growth'])
+# strip_plot([layers_3_growth, layers_2_growth, layers_1_growth], ['3 Layers \n Growth', '2 Layers \n Growth','1 Layer \n Growth'])
 
 # (3 Layers, Growth) vs (2 Layers, Growth) vs (1 Layer, Growth) 
 # plot_average_fitness([layers_3_growth_true, layers_2_growth_true, layers_1_growth_true], ['3 Layers, Growth', '2 Layers, Growth','1 Layer, Growth'])

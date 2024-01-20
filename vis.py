@@ -177,4 +177,4 @@ if __name__ == '__main__':
     # exp_best_phenotype = simulate_one_individual(exp.best_solution())
     # visualize_all_layers(exp_best_phenotype, 'control_best_all_layers_1.gif')
     exp_best_phenotype = simulate_one_individual(exp.best_solution())
-    visualize_all_layers(exp_best_phenotype, 'exp_best_all_layers.png')
+    visualize_all_layers(exp_best_phenotype, f'{args.exp}.png')
