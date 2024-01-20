@@ -130,4 +130,4 @@ if __name__ == '__main__':
         exp = pickle.load(pf)
 
     exp_best_phenotype = simulate_one_individual(exp.best_solution())
-    visualize_all_layers(exp_best_phenotype, 'exp_best_all_layers.png')
+    visualize_all_layers(exp_best_phenotype, f'{args.exp}.png')
