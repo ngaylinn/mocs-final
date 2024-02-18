@@ -27,8 +27,8 @@ class Solution:
 
     def make_offspring(self):
         child = Solution(layers=self.layers)
-        child.state_genotype = child.state_genotype.copy()
-        child.growth_genotype = child.growth_genotype.copy()
+        child.state_genotype = self.state_genotype # .copy()
+        child.growth_genotype = self.growth_genotype # .copy()
         child.mutate()
         return child
 
@@ -214,7 +214,7 @@ class AgeFitnessPareto:
             Solution(layers=self.layers) for _ in range(self.target_population_size)
         ]
 
-    def extend_population(self):
+    def generate_new_individuals(self):
         new_individuals = []
         # 1 - Breed: do tournament selection
         # The minus one is to make room for one random individual at the end.
@@ -222,6 +222,11 @@ class AgeFitnessPareto:
             # Randomly select an individual using tournament selection
             parent = self.tournament_select()
             new_individuals.append(parent.make_offspring())
+
+        return new_individuals
+
+    def extend_population(self):
+        new_individuals = self.generate_new_individuals()
 
         self.population += new_individuals
 
