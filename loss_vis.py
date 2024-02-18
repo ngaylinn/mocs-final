@@ -1,4 +1,6 @@
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+
 import numpy as np
 
 # this script is purely for visualization purposes!!
@@ -11,6 +13,7 @@ def draw_initial_ca(grid_size=64, shape_size=32):
     # identify desired shape
     desired_shape_start = (grid_size // 2 - shape_size // 2, grid_size // 2 - shape_size // 2)
     desired_shape_end = (grid_size // 2 + shape_size // 2 - 1, grid_size // 2 + shape_size // 2 - 1)
+
     grid[desired_shape_start[0]:desired_shape_end[0]+1, desired_shape_start[1]:desired_shape_end[1]+1] = 0.5
 
     # fill one of the center cells
@@ -93,7 +96,6 @@ def draw_final_ca(grid_size=64, shape_size=32):
         # move to the chosen/next neighbor
         current_cell = chosen_neighbor
 
-
     # plot stuff
     plt.imshow(target_shape, cmap='Reds', vmin=0, vmax=1, origin='upper', interpolation='none', aspect='equal')
     plt.imshow(grid, cmap='Reds', vmin=0, vmax=1, origin='upper', interpolation='none', aspect='equal', alpha=0.5)
@@ -102,11 +104,47 @@ def draw_final_ca(grid_size=64, shape_size=32):
     print(f'filled_nontarget_cells = {filled_cells_outside}')
     plt.savefig('loss_ex.png')
     plt.show()
+
+
+def plot_selection_area(data_64x64, data_32x32, data_16x16, data_8x8, color_maps):
+    """
+    Plots 4 grids of different resolutions side by side.
+
+    :param data_64x64: A 64x64 numpy array representing the grid data.
+    :param data_32x32: A 32x32 numpy array representing the grid data.
+    :param data_16x16: A 16x16 numpy array representing the grid data.
+    :param data_8x8: An 8x8 numpy array representing the grid data.
+    """
+    fig, axs = plt.subplots(4, 1, figsize=(5, 20))
+
+    # Plot each grid and add gridlines
+    for ax, data, color_map in zip(axs, [data_64x64, data_32x32, data_16x16, data_8x8], 
+                               color_maps):
+        ax.imshow(data, cmap=color_map)
+        # ax.set_title(title)
+        ax.set_xticks(np.arange(-.5, data.shape[1], 1), minor=True)
+        ax.set_yticks(np.arange(-.5, data.shape[0], 1), minor=True)
+        ax.grid(which="minor", color="black", linestyle='-', linewidth=0.5)
+        ax.tick_params(which="minor", size=0)
+
+    # Remove major axis ticks
+    for ax in axs:
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    plt.tight_layout()
+    plt.show()
+
     
 
+# data_64x64 = np.random.rand(64, 64)
+# data_32x32 = np.random.rand(32, 32)
+# data_16x16 = np.random.rand(16, 16)
+# data_8x8 = np.random.rand(8, 8)
+
+# plot_selection_area(data_64x64, data_32x32, data_16x16, data_8x8)
 
 
-
-draw_initial_ca()
-draw_final_ca()
+# draw_initial_ca()
+# draw_final_ca()
 
