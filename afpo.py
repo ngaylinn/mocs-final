@@ -13,9 +13,13 @@ activation2int = {
     'relu': ACTIVATION_RELU
 }
 
+N_RANDOM_INDIVIDUALS = 10
+
 @functools.total_ordering # Sortable by fitness
 class Solution:
-    def __init__(self, layers):
+    def __init__(self, layers, id, parent_id=None):
+        self.id = id
+        self.parent_id = parent_id
         self.layers = layers
         self.n_layers = len(self.layers)
         self.base_layer = next((i for i, d in enumerate(self.layers) if d.get('base', False)), None)
@@ -23,13 +27,20 @@ class Solution:
         self.been_simulated = False
         self.fitness = None
         self.phenotype = None
+        self.mutation_info = None
         self.randomize_genome()
 
-    def make_offspring(self):
-        child = Solution(layers=self.layers)
+    def make_offspring(self, new_id, mutate_layer=None, state_or_growth=None):
+        child = Solution(layers=self.layers, id=new_id, parent_id=self.id)
         child.state_genotype = self.state_genotype # .copy()
         child.growth_genotype = self.growth_genotype # .copy()
-        child.mutate()
+        if mutate_layer == None:
+            child.mutate(mutate_layer)
+        else: 
+            assert mutate_layer in range(self.n_layers)
+            assert state_or_growth is not None
+            child.mutate_layer(mutate_layer, state_or_growth=state_or_growth)
+            
         return child
 
     def increment_age(self):
@@ -46,6 +57,31 @@ class Solution:
 
     def get_fitness(self):
         return self.fitness
+    
+    def mutate_layer(self, layer, state_or_growth='state'):
+        """
+        Mutate a specific layer's genome by one weight
+        """
+        if state_or_growth == 'state':
+            random_nonzero_indices = np.transpose(np.nonzero(self.state_genotype[layer]))
+            c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))][0]
+            self.state_genotype[layer, c] = np.random.random() * 2 - 1
+        else:
+            random_nonzero_indices = np.transpose(np.nonzero(self.growth_genotype))
+            r, c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))]
+            self.growth_genotype[r, c] = np.random.random() * 2 - 1
+
+        below_range, around_range, above_range = self.get_layer_state_indices(layer)
+        if c in range(*below_range):
+            kind = 'below'
+        elif c in range(*around_range):
+            kind = 'around'
+        elif c in range(*above_range):
+            kind = 'above'
+        else:
+            kind = None
+        self.mutation_info = {'type': state_or_growth, 'kind': kind, 'layer': layer}
+        
 
     def mutate(self):
         mutate_growth_weight = np.random.choice([0, 1], p=[self.state_n_weights / self.total_weights, self.growth_n_weights / self.total_weights])
@@ -54,11 +90,21 @@ class Solution:
             random_nonzero_indices = np.transpose(np.nonzero(self.growth_genotype))
             r, c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))]
             self.growth_genotype[r, c] = np.random.random() * 2 - 1
+            self.mutation_info = {'type': 'growth', 'layer': self.base_layer, 'kind': None}
         else:
             random_nonzero_indices = np.transpose(np.nonzero(self.state_genotype))
             r, c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))]
             self.state_genotype[r, c] = np.random.random() * 2 - 1
-
+            below_range, around_range, above_range = self.get_layer_state_indices(r)
+            if c in range(*below_range):
+                kind = 'below'
+            elif c in range(*around_range):
+                kind = 'around'
+            elif c in range(*above_range):
+                kind = 'above'
+            else:
+                kind = None
+            self.mutation_info = {'type': 'state', 'layer': r, 'kind': kind}
 
     def dominates(self, other):
         return all([self.age <= other.age, self.fitness <= other.fitness])
@@ -88,9 +134,22 @@ class Solution:
         n_below = 0 if l == 0 else int((self.layers[l]['res'] / self.layers[l-1]['res'])**2)
         n_around = 9 # Moore neighborhood
 
+        # below, around, above
         return ((0,n_below), (n_below, n_below+n_around), (n_below+n_around, n_below+n_around+n_above))
 
+    def get_distance_from_parent(self, parent):
+        assert self.parent_id == parent.id
+        if self.parent_id is None:
+            return 0
+        else:
+            return np.count_nonzero(self.phenotype != parent.phenotype)
+
     def randomize_genome(self):
+        """
+        Structure of genome:
+        - state_genotype: (n_layers, max_below + max_around + max_above)
+        - growth_genotype: (4, max_below + max_around + max_above)
+        """
         max_below = max([self.get_layer_n_params(l)[0] for l in range(self.n_layers)])
         max_around = max([self.get_layer_n_params(l)[1] for l in range(self.n_layers)])
         max_above = max([self.get_layer_n_params(l)[2] for l in range(self.n_layers)])
@@ -148,8 +207,10 @@ class AgeFitnessPareto:
         self.base_layer = next((i for i, d in enumerate(self.layers) if d.get('base', False)), None)
         self.population = []
         self.current_generation = 1
+        self.num_ids = 0
 
         self.best_fitness_history = []
+        self.parent_child_distance_history = []
 
     def evolve(self):
         self.initialize_population()
@@ -164,9 +225,9 @@ class AgeFitnessPareto:
         # Actually run the simulations, and time how long it takes.
         start = time.perf_counter()
 
-        init_phenotypes = self.make_seed_phenotypes()
         unsimulated_growth_genotypes, unsimulated_state_genotypes, unsimulated_indices = self.get_unsimulated_genotypes()
-        
+        init_phenotypes = self.make_seed_phenotypes(unsimulated_growth_genotypes.shape[0])
+
         ##### SIMULATE ON GPUs #####
         print(f'Starting {self.target_population_size} simulations...')
         phenotypes = simulate(
@@ -185,11 +246,16 @@ class AgeFitnessPareto:
         print(f'Finished in {elapsed:0.2f} seconds ({lps:0.2f} lifetimes per second).')
 
         fitness_scores = self.evaluate_phenotypes(phenotypes)
+        parent_child_distances = []
         # Set the fitness and simulated flag for each of the just-evaluated solutions
         for i, idx in enumerate(unsimulated_indices):
             self.population[idx].set_fitness(fitness_scores[i])
             self.population[idx].set_simulated(True)
-            # self.population[idx].set_phenotype(phenotypes[i])
+            self.population[idx].set_phenotype(phenotypes[i][-1][self.base_layer] > 0) # phenotype is now binarized last step of base layer
+            # Get actual parent Solution object from population using parent_id
+            parent = next((sol for sol in self.population if sol.id == self.population[idx].parent_id), None)
+            if parent is not None:
+                parent_child_distances.append(self.population[idx].get_distance_from_parent(parent))
 
         print('Average fitness:',
               np.mean([sol.fitness for sol in self.population]),
@@ -206,12 +272,12 @@ class AgeFitnessPareto:
         self.extend_population()
 
         self.best_fitness_history.append(self.best_solution())
-
+        self.parent_child_distance_history.append(parent_child_distances)
 
     def initialize_population(self):
         # Initialize target_population_size random solutions
         self.population = [
-            Solution(layers=self.layers) for _ in range(self.target_population_size)
+            Solution(layers=self.layers, id=self.get_available_id()) for _ in range(self.target_population_size)
         ]
 
     def generate_new_individuals(self):
@@ -221,7 +287,7 @@ class AgeFitnessPareto:
         for _ in range(self.target_population_size - 1):
             # Randomly select an individual using tournament selection
             parent = self.tournament_select()
-            new_individuals.append(parent.make_offspring())
+            new_individuals.append(parent.make_offspring(self.get_available_id()))
 
         return new_individuals
 
@@ -230,8 +296,9 @@ class AgeFitnessPareto:
 
         self.population += new_individuals
 
-        # Add a single random individual
-        self.population.append(Solution(layers=self.layers))
+        # Add N_RANDOM_INDIVIDUALS new random individuals
+        self.population += [Solution(layers=self.layers, id=self.get_available_id()) for _ in range(N_RANDOM_INDIVIDUALS)]
+
 
     def reduce_population(self):
         # Remove individuals until target population is reached
@@ -315,7 +382,7 @@ class AgeFitnessPareto:
 
 
     # @functools.cache
-    def make_seed_phenotypes(self):
+    def make_seed_phenotypes(self, n):
         """Starting phenotypes to use by default (one ALIVE cell in middle)."""
         # For each inidividual, capture phenotype development over NUM_STEPS. Each
         # phenotype has NUM_LAYERS layers which are all WORLD_SIZE x WORLD_SIZE
@@ -324,7 +391,7 @@ class AgeFitnessPareto:
         # 1 and 2 are conceptually smaller than layer0 (1/4 and 1/8 respectively),
         # but are represented using arrays of the same size for simplicity.
         phenotypes = np.full(
-            (self.target_population_size, NUM_STEPS, self.n_layers, WORLD_SIZE, WORLD_SIZE),
+            (n, NUM_STEPS, self.n_layers, WORLD_SIZE, WORLD_SIZE),
             DEAD, dtype=np.float32)
         
         middle_start = WORLD_SIZE // 2
@@ -332,7 +399,7 @@ class AgeFitnessPareto:
 
         # Use a single ALIVE pixel in the middle of the CA world as the initial
         # phenotype state for all individuals in the population.
-        for i in range(self.target_population_size):
+        for i in range(n):
             phenotypes[i][0][self.base_layer][middle_start:middle_end, middle_start:middle_end] = ALIVE
 
         return phenotypes
@@ -342,6 +409,9 @@ class AgeFitnessPareto:
         with open(pickle_file_name, 'wb') as pf:
             pickle.dump(self, pf, protocol=pickle.HIGHEST_PROTOCOL)
 
+    def get_available_id(self):
+        self.num_ids += 1
+        return self.num_ids
 
     def best_solution(self):
         return min([sol for sol in self.population if sol.fitness is not None])
