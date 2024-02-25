@@ -35,7 +35,7 @@ class Solution:
         child.state_genotype = self.state_genotype # .copy()
         child.growth_genotype = self.growth_genotype # .copy()
         if mutate_layer == None:
-            child.mutate(mutate_layer)
+            child.mutate()
         else: 
             assert mutate_layer in range(self.n_layers)
             assert state_or_growth is not None
@@ -80,7 +80,7 @@ class Solution:
             kind = 'above'
         else:
             kind = None
-        self.mutation_info = {'type': state_or_growth, 'kind': kind, 'layer': layer}
+        self.mutation_info = {'type': state_or_growth, 'kind': kind, 'layer': layer, 'rc': (layer if state_or_growth == 'state' else r, c)}
         
 
     def mutate(self):
