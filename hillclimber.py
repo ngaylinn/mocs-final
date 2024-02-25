@@ -33,6 +33,7 @@ class HillClimber:
         self.num_ids = 0
 
         self.best_fitness_history = []
+        self.mean_fitness_history = []
         self.parent_child_distance_history = []
         self.n_neutral_over_generations = []
 
@@ -84,6 +85,11 @@ class HillClimber:
             if parent is not None:
                 parent_child_distances.append(self.children_population[id].get_distance_from_parent(parent))
 
+        if self.children_population[rand_id].parent_id is not None:
+            print(self.children_population[rand_id].mutation_info)
+            print(self.children_population[rand_id].state_genotype)
+            print(self.parent_population[self.children_population[rand_id].parent_id].state_genotype)
+
         print('Average fitness:',
               np.mean([sol.fitness for id, sol in self.children_population.items()]),
               ', Min fitness: ',
@@ -97,6 +103,7 @@ class HillClimber:
         self.mutate_population()
 
         self.best_fitness_history.append(self.best_solution())
+        self.mean_fitness_history.append(np.mean([sol.fitness for id, sol in self.parent_population.items()]))
         self.parent_child_distance_history.append(parent_child_distances)
 
     def initialize_population(self):
