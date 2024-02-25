@@ -22,7 +22,7 @@ class HillClimber:
         self.use_growth = experiment_constants['use_growth']
         self.activation = experiment_constants['activation']
         self.shape = experiment_constants['shape']
-        self.mutate_layer = experiment_constants['mutate_layer']
+        self.mutate_layers = experiment_constants['mutate_layers']
         self.state_or_growth = experiment_constants['state_or_growth']
 
         self.n_layers = len(self.layers)
@@ -151,7 +151,7 @@ class HillClimber:
         self.children_population = {}
         # Make a new child from every parent
         for id, solution in self.parent_population.items():
-            child = solution.make_offspring(id, mutate_layer=self.mutate_layer, state_or_growth=self.state_or_growth)
+            child = solution.make_offspring(id, mutate_layers=self.mutate_layers, state_or_growth=self.state_or_growth)
             self.children_population[id] = child
 
     def tournament_select(self):
