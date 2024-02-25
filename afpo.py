@@ -30,16 +30,16 @@ class Solution:
         self.mutation_info = None
         self.randomize_genome()
 
-    def make_offspring(self, new_id, mutate_layer=None, state_or_growth=None):
+    def make_offspring(self, new_id, mutate_layers=None, state_or_growth=None):
         child = Solution(layers=self.layers, id=new_id, parent_id=self.id)
         child.state_genotype = self.state_genotype # .copy()
         child.growth_genotype = self.growth_genotype # .copy()
-        if mutate_layer == None:
+        if mutate_layers is None:
             child.mutate()
-        else: 
-            assert mutate_layer in range(self.n_layers)
+        else:
+            assert [l in range(self.n_layers) for l in mutate_layers]
             assert state_or_growth is not None
-            child.mutate_layer(mutate_layer, state_or_growth=state_or_growth)
+            child.mutate_layers(mutate_layers, state_or_growth=state_or_growth)
             
         return child
 
@@ -58,11 +58,12 @@ class Solution:
     def get_fitness(self):
         return self.fitness
     
-    def mutate_layer(self, layer, state_or_growth='state'):
+    def mutate_layers(self, layers, state_or_growth='state'):
         """
         Mutate a specific layer's genome by one weight
         """
         if state_or_growth == 'state':
+            layer = np.random.choice(layers)
             random_nonzero_indices = np.transpose(np.nonzero(self.state_genotype[layer]))
             c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))][0]
             self.state_genotype[layer, c] = np.random.random() * 2 - 1
@@ -71,7 +72,8 @@ class Solution:
             r, c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))]
             self.growth_genotype[r, c] = np.random.random() * 2 - 1
 
-        below_range, around_range, above_range = self.get_layer_state_indices(layer)
+        L = layer if state_or_growth == 'state' else r
+        below_range, around_range, above_range = self.get_layer_state_indices(L)
         if c in range(*below_range):
             kind = 'below'
         elif c in range(*around_range):
