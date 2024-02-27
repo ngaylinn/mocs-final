@@ -1,6 +1,7 @@
 import functools
 import time
 import pickle
+from collections import Counter
 
 import numpy as np
 
@@ -89,7 +90,8 @@ class HillClimber:
             print(self.children_population[rand_id].mutation_info)
             print(self.children_population[rand_id].state_genotype)
             print(self.parent_population[self.children_population[rand_id].parent_id].state_genotype)
-
+            print(Counter([solution.mutation_info['layer'] for i, solution in self.children_population.items()]))
+            
         print('Average fitness:',
               np.mean([sol.fitness for id, sol in self.children_population.items()]),
               ', Min fitness: ',
