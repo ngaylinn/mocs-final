@@ -204,6 +204,7 @@ class AgeFitnessPareto:
         self.use_growth = experiment_constants['use_growth']
         self.activation = experiment_constants['activation']
         self.shape = experiment_constants['shape']
+        self.neighbor_map_type = experiment_constants['neighbor_map_type'] # 'spatial' or 'random'
 
         self.n_layers = len(self.layers)
         self.base_layer = next((i for i, d in enumerate(self.layers) if d.get('base', False)), None)
@@ -213,6 +214,9 @@ class AgeFitnessPareto:
 
         self.best_fitness_history = []
         self.parent_child_distance_history = []
+
+        self.below_map = self.initialize_below_map()
+        self.above_map = self.initialize_above_map()
 
     def evolve(self):
         self.initialize_population()
@@ -241,7 +245,9 @@ class AgeFitnessPareto:
             self.population[0].above_start, 
             self.use_growth, 
             init_phenotypes, 
-            activation2int[self.activation])
+            activation2int[self.activation],
+            self.below_map,
+            self.above_map)
 
         elapsed = time.perf_counter() - start
         lps = self.target_population_size / elapsed
@@ -405,7 +411,37 @@ class AgeFitnessPareto:
             phenotypes[i][0][self.base_layer][middle_start:middle_end, middle_start:middle_end] = ALIVE
 
         return phenotypes
+    
+    def initialize_below_map(self):
+        below_map = np.zeros((self.n_layers, 4, 3)).astype(int)
+        if self.neighbor_map_type == 'random':
+            for l in range(self.n_layers):
+                rand_l = np.random.randint(self.n_layers)
+                rand_r_offset = np.random.randint(WORLD_SIZE)
+                rand_c_offset = np.random.randint(WORLD_SIZE)
+                below_map[l, 0] = [rand_l, rand_r_offset, rand_c_offset]
+        else:
+            for l in range(self.n_layers):
+                below_map[l, 0] = [l-1, 0, 0]
+                below_map[l, 1] = [l-1, 0, 1]
+                below_map[l, 2] = [l-1, 1, 0]
+                below_map[l, 3] = [l-1, 1, 1]
 
+        return below_map
+    
+    def initialize_above_map(self):
+        above_map = np.zeros((self.n_layers, 3)).astype(int)
+        if self.neighbor_map_type == 'random':
+            for l in range(self.n_layers):
+                rand_l = np.random.randint(self.n_layers)
+                rand_r_offset = np.random.randint(WORLD_SIZE)
+                rand_c_offset = np.random.randint(WORLD_SIZE)
+                above_map[l] = [rand_l, rand_r_offset, rand_c_offset]
+        else:
+            for l in range(self.n_layers):
+                above_map[l] = [l+1, 0, 0]
+
+        return above_map
 
     def pickle_afpo(self, pickle_file_name):
         with open(pickle_file_name, 'wb') as pf:
