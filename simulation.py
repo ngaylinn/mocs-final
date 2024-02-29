@@ -90,8 +90,8 @@ def look_down(layer, phenotypes, genotypes, down_weights_start, pop_idx, step, r
         # one layer down.
         new_layer = below_map[layer][i][0]
         new_layer_g = 1 << new_layer
-        new_row = ((below_map[layer][i][1] + ((row // g)*g)) % WORLD_SIZE) // new_layer_g
-        new_col = ((below_map[layer][i][2] + ((col // g)*g)) % WORLD_SIZE) // new_layer_g
+        new_row = ((((row // g)*g) + ((below_map[layer][i][1] // new_layer_g)*new_layer_g)) % WORLD_SIZE) # // new_layer_g
+        new_col = ((((col // g)*g) + ((below_map[layer][i][2] // new_layer_g)*new_layer_g)) % WORLD_SIZE) # // new_layer_g
         # new_row = (row + below_map[layer][i][1]) % WORLD_SIZE
         # new_col = (col + below_map[layer][i][2]) % WORLD_SIZE
         neighbor_state = phenotypes[pop_idx][step-1][new_layer][new_row][new_col]
