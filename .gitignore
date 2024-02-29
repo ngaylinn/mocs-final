@@ -7,3 +7,4 @@ experiments
 experiments/*
 vacc_out_files
 vacc_out_files/*
+*.ipynb
