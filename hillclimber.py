@@ -1,5 +1,6 @@
 import functools
 import time
+from collections import Counter
 import pickle
 from collections import Counter
 
@@ -37,6 +38,7 @@ class HillClimber:
         self.mean_fitness_history = []
         self.parent_child_distance_history = []
         self.n_neutral_over_generations = []
+        self.mutation_data_over_generations = []
 
     def evolve(self):
         self.initialize_population()
@@ -102,8 +104,9 @@ class HillClimber:
         n_neutral_children = self.select()
         self.n_neutral_over_generations.append(n_neutral_children)
         # Extend the population using tournament selection
-        self.mutate_population()
+        mutation_data = self.mutate_population()
 
+        self.mutation_data_over_generations.append(mutation_data)
         self.best_fitness_history.append(self.best_solution())
         self.mean_fitness_history.append(np.mean([sol.fitness for id, sol in self.parent_population.items()]))
         self.parent_child_distance_history.append(parent_child_distances)
@@ -150,11 +153,20 @@ class HillClimber:
         """
         Mutate each individual in the population  
         """
+        mutation_data = []
         self.children_population = {}
         # Make a new child from every parent
         for id, solution in self.parent_population.items():
             child = solution.make_offspring(id, mutate_layers=self.mutate_layers, state_or_growth=self.state_or_growth)
+            mutation_data.append(child.mutation_info)
             self.children_population[id] = child
+
+        aggregate_mutation_data = {
+            'type': dict(Counter([mutation_info['type'] for mutation_info in mutation_data])),
+            'kind': dict(Counter([mutation_info['kind'] for mutation_info in mutation_data])),
+            'layer': dict(Counter([mutation_info['layer'] for mutation_info in mutation_data])),
+        }
+        return aggregate_mutation_data
 
     def tournament_select(self):
         """

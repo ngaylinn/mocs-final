@@ -12,7 +12,6 @@ set -x
 
 # Arg 1: Experiment file
 # Arg 2: Experiment name
-# Arg 3: optimizer type ('afpo' or 'hillclimber')
 
-echo "$1" "$2" "$3"
-python3 run_exp_vacc.py "$1" "$2" "$3"
+echo "$1" "$2"
+python3 run_exp_vacc.py "$1" "$2"
