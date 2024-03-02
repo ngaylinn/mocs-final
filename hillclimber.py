@@ -26,6 +26,8 @@ class HillClimber:
         self.shape = experiment_constants['shape']
         self.mutate_layers = experiment_constants['mutate_layers']
         self.state_or_growth = experiment_constants['state_or_growth']
+        self.noise_rate = experiment_constants['noise_rate']
+        self.noise_intensity = experiment_constants['noise_intensity']
 
         self.n_layers = len(self.layers)
         self.base_layer = next((i for i, d in enumerate(self.layers) if d.get('base', False)), None)
@@ -53,46 +55,63 @@ class HillClimber:
         # Actually run the simulations, and time how long it takes.
         start = time.perf_counter()
 
-        unsimulated_growth_genotypes, unsimulated_state_genotypes, unsimulated_ids = self.get_unsimulated_genotypes()
-        init_phenotypes = self.make_seed_phenotypes(unsimulated_growth_genotypes.shape[0])
+        unsimulated_growth_genotypes_children, unsimulated_state_genotypes_children, unsimulated_ids_children = self.get_unsimulated_genotypes()
+        growth_genotypes_parents, state_genotypes_parents, parent_ids = self.get_parent_genotypes()
+        init_phenotypes = self.make_seed_phenotypes(unsimulated_growth_genotypes_children.shape[0])
+        noise = self.generate_noise()
 
         rand_id = list(self.children_population.keys())[0]
 
         ##### SIMULATE ON GPUs #####
         print(f'Starting {self.target_population_size} simulations...')
-        phenotypes = simulate(
-            unsimulated_growth_genotypes, 
-            unsimulated_state_genotypes, 
+        children_phenotypes = simulate(
+            unsimulated_growth_genotypes_children, 
+            unsimulated_state_genotypes_children, 
             self.n_layers, 
             self.base_layer,  
             self.children_population[rand_id].around_start, 
             self.children_population[rand_id].above_start, 
             self.use_growth, 
             init_phenotypes, 
-            activation2int[self.activation])
+            activation2int[self.activation],
+            noise)
+        
+        # Resimulate parents with new noise
+        # i.e. if you want to stick around in the population, you have to endure the noise
+        if len(self.parent_population) > 0:
+            print(f'Resimulating parents...')
+            parent_phenotypes = simulate(
+                growth_genotypes_parents, 
+                state_genotypes_parents, 
+                self.n_layers, 
+                self.base_layer, 
+                self.parent_population[parent_ids[0]].around_start, 
+                self.parent_population[parent_ids[0]].above_start, 
+                self.use_growth, 
+                init_phenotypes, 
+                activation2int[self.activation],
+                noise)
+            parent_fitness_scores = self.evaluate_phenotypes(parent_phenotypes)
+            for i, id in enumerate(parent_ids):
+                self.parent_population[id].set_fitness(parent_fitness_scores[i])
+                self.parent_population[id].set_phenotype(parent_phenotypes[i][-1][self.base_layer] > 0)
 
         elapsed = time.perf_counter() - start
-        lps = self.target_population_size / elapsed
+        lps = (self.target_population_size*2) / elapsed
         print(f'Finished in {elapsed:0.2f} seconds ({lps:0.2f} lifetimes per second).')
 
-        fitness_scores = self.evaluate_phenotypes(phenotypes)
+        children_fitness_scores = self.evaluate_phenotypes(children_phenotypes)
         parent_child_distances = []
         # Set the fitness and simulated flag for each of the just-evaluated solutions
-        for i, id in enumerate(unsimulated_ids):
-            self.children_population[id].set_fitness(fitness_scores[i])
+        for i, id in enumerate(unsimulated_ids_children):
+            self.children_population[id].set_fitness(children_fitness_scores[i])
             self.children_population[id].set_simulated(True)
-            self.children_population[id].set_phenotype(phenotypes[i][-1][self.base_layer] > 0) # phenotype is now binarized last step of base layer
+            self.children_population[id].set_phenotype(children_phenotypes[i][-1][self.base_layer] > 0) # phenotype is now binarized last step of base layer
             # Get actual parent Solution object from population using parent_id
             parent_id = self.children_population[id].parent_id
             parent = self.parent_population[parent_id] if parent_id is not None else None
             if parent is not None:
                 parent_child_distances.append(self.children_population[id].get_distance_from_parent(parent))
-
-        if self.children_population[rand_id].parent_id is not None:
-            print(self.children_population[rand_id].mutation_info)
-            print(self.children_population[rand_id].state_genotype)
-            print(self.parent_population[self.children_population[rand_id].parent_id].state_genotype)
-            print(Counter([solution.mutation_info['layer'] for i, solution in self.children_population.items()]))
             
         print('Average fitness:',
               np.mean([sol.fitness for id, sol in self.children_population.items()]),
@@ -190,6 +209,28 @@ class HillClimber:
         ]
         # Aggregate the genotypes into a single matrix for simulation
         return np.array(unsimulated_growth_genotypes, dtype=np.float32), np.array(unsimulated_state_genotypes, dtype=np.float32), unsimulated_ids
+    
+    def get_parent_genotypes(self):
+        # Filter out just the genotypes that haven't been simulated yet.
+        parent_growth_genotypes = [sol.growth_genotype for _, sol in self.parent_population.items()]
+        parent_state_genotypes = [sol.state_genotype for _, sol in self.parent_population.items()]
+        parent_ids = [id for id, sol in self.parent_population.items()]
+        # Aggregate the genotypes into a single matrix for simulation
+        return np.array(parent_growth_genotypes, dtype=np.float32), np.array(parent_state_genotypes, dtype=np.float32), parent_ids
+
+    def generate_noise(self):
+        shape = (NUM_STEPS, self.n_layers, WORLD_SIZE, WORLD_SIZE)
+        noise_matrix = np.zeros(shape)
+        mask = np.random.rand(*shape) < self.noise_rate
+        normal_values = np.random.normal(0, self.noise_intensity, np.count_nonzero(mask))
+        print(normal_values.shape, np.count_nonzero(mask))
+        noise_matrix[mask] = normal_values
+
+        for l in range(1,self.n_layers):
+            granularity = 2**l
+            noise_matrix[:, l] = np.repeat(np.repeat(noise_matrix[:, l, ::granularity, ::granularity], granularity, axis=1), granularity, axis=2)
+
+        return noise_matrix
 
     def get_target_shape(self):
         """

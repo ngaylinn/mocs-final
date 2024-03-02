@@ -204,6 +204,8 @@ class AgeFitnessPareto:
         self.use_growth = experiment_constants['use_growth']
         self.activation = experiment_constants['activation']
         self.shape = experiment_constants['shape']
+        self.noise_rate = experiment_constants['noise_rate']
+        self.noise_intensity = experiment_constants['noise_intensity']
 
         self.n_layers = len(self.layers)
         self.base_layer = next((i for i, d in enumerate(self.layers) if d.get('base', False)), None)
@@ -229,6 +231,7 @@ class AgeFitnessPareto:
 
         unsimulated_growth_genotypes, unsimulated_state_genotypes, unsimulated_indices = self.get_unsimulated_genotypes()
         init_phenotypes = self.make_seed_phenotypes(unsimulated_growth_genotypes.shape[0])
+        noise = self.generate_noise()
 
         ##### SIMULATE ON GPUs #####
         print(f'Starting {self.target_population_size} simulations...')
@@ -241,7 +244,8 @@ class AgeFitnessPareto:
             self.population[0].above_start, 
             self.use_growth, 
             init_phenotypes, 
-            activation2int[self.activation])
+            activation2int[self.activation],
+            noise)
 
         elapsed = time.perf_counter() - start
         lps = self.target_population_size / elapsed
@@ -405,7 +409,20 @@ class AgeFitnessPareto:
             phenotypes[i][0][self.base_layer][middle_start:middle_end, middle_start:middle_end] = ALIVE
 
         return phenotypes
+    
+    def generate_noise(self):
+        shape = (NUM_STEPS, self.n_layers, WORLD_SIZE, WORLD_SIZE)
+        noise_matrix = np.zeros(shape)
+        mask = np.random.rand(*shape) < self.noise_rate
+        normal_values = np.random.normal(0, self.noise_intensity, np.count_nonzero(mask))
+        print(normal_values.shape, np.count_nonzero(mask))
+        noise_matrix[mask] = normal_values
 
+        for l in range(1,self.n_layers):
+            granularity = 2**l
+            noise_matrix[:, l] = np.repeat(np.repeat(noise_matrix[:, l, ::granularity, ::granularity], granularity, axis=1), granularity, axis=2)
+
+        return noise_matrix
 
     def pickle_afpo(self, pickle_file_name):
         with open(pickle_file_name, 'wb') as pf:

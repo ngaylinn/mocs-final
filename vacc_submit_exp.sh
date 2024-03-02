@@ -4,7 +4,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gpus=1
-#SBATCH --job-name=mocs_exp_%j
+#SBATCH --job-name=submitter
 #SBATCH --output=./vacc_out_files/%x_%j.out
 #SBATCH --time=1:00:00
 

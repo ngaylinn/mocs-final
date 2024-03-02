@@ -162,7 +162,7 @@ def get_spread_update(num_layers, layer, phenotypes, growth_genotypes, around_st
 
 
 @cuda.jit
-def update_cell(num_layers, layer, use_growth, phenotypes, growth_genotypes, state_genotypes, base_layer, around_start, above_start, pop_idx, step, row, col, activation):
+def update_cell(num_layers, layer, use_growth, phenotypes, growth_genotypes, state_genotypes, base_layer, around_start, above_start, pop_idx, step, row, col, activation, noise):
     """Compute the next state for a single cell in layer0 from prev states."""
 
     # Calculate the weighted sum of all neighbors.
@@ -188,17 +188,17 @@ def update_cell(num_layers, layer, use_growth, phenotypes, growth_genotypes, sta
             phenotypes[pop_idx][step][layer][((row+1) % WORLD_SIZE)][(col % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
 
     # Actually update the phenotype state for step on layer1 at (row, col).
-    if activation == ACTIVATION_SIGMOID:
-        phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
-    elif activation == ACTIVATION_TANH:
-        phenotypes[pop_idx][step][layer][row][col] = activate_tanh(signal_sum)
-    elif activation == ACTIVATION_RELU:
-        phenotypes[pop_idx][step][layer][row][col] = activate_relu(signal_sum)
-        
+    # if activation == ACTIVATION_SIGMOID:
+    phenotypes[pop_idx][step][layer][row][col] = max(0, min(activate_sigmoid(signal_sum) + noise[step, layer, row, col], 1.0))
+    # elif activation == ACTIVATION_TANH:
+    #     phenotypes[pop_idx][step][layer][row][col] = activate_tanh(signal_sum)
+    # elif activation == ACTIVATION_RELU:
+    #     phenotypes[pop_idx][step][layer][row][col] = activate_relu(signal_sum)
+
 
 # Max registers can be tuned per device. 64 is the most my laptop can handle.
 @cuda.jit(max_registers=64)
-def simulation_kernel(growth_genotypes, state_genotypes, phenotypes, num_layers, base_layer, around_start, above_start, use_growth, activation):
+def simulation_kernel(growth_genotypes, state_genotypes, phenotypes, num_layers, base_layer, around_start, above_start, use_growth, activation, noise):
     """Compute and record the full development process of a population."""
     # Compute indices for this thread.
     pop_idx = cuda.blockIdx.x
@@ -213,7 +213,7 @@ def simulation_kernel(growth_genotypes, state_genotypes, phenotypes, num_layers,
         for col in range(start_col, start_col + COLS_PER_THREAD):
             # Update the state in every layer this individual uses.
             for layer in range(0, num_layers):
-                update_cell(num_layers, layer, use_growth, phenotypes, growth_genotypes, state_genotypes, base_layer, around_start, above_start, pop_idx, step, row, col, activation)
+                update_cell(num_layers, layer, use_growth, phenotypes, growth_genotypes, state_genotypes, base_layer, around_start, above_start, pop_idx, step, row, col, activation, noise)
         # Make sure all threads have finished computing this step before going
         # on to the next one.
         cuda.syncthreads()
@@ -241,7 +241,7 @@ def check_granularity(g, image):
     return np.array_equal(image, scaled_up)
 
 
-def simulate(growth_genotypes, state_genotypes, num_layers, base_layer, around_start, above_start, use_growth, phenotypes, activation):
+def simulate(growth_genotypes, state_genotypes, num_layers, base_layer, around_start, above_start, use_growth, phenotypes, activation, noise):
     """Simulate genotypes and return phenotype videos."""
 
     # Infer population size from genotypes
@@ -266,13 +266,14 @@ def simulate(growth_genotypes, state_genotypes, num_layers, base_layer, around_s
     assert type(use_growth) is bool
     assert type(activation) is int
 
-    assert phenotypes.shape == (
-        pop_size, NUM_STEPS, num_layers, WORLD_SIZE, WORLD_SIZE)
+    assert noise.shape == (NUM_STEPS, num_layers, WORLD_SIZE, WORLD_SIZE)
+    assert phenotypes.shape == (pop_size, NUM_STEPS, num_layers, WORLD_SIZE, WORLD_SIZE)
 
     # Copy input data from host memory to device memory.
     d_phenotypes = cuda.to_device(phenotypes)
     d_growth_genotypes = cuda.to_device(growth_genotypes)
     d_state_genotypes = cuda.to_device(state_genotypes)
+    d_noise = cuda.to_device(noise)
 
     # Actually run the simulation for all individuals in parallel on the GPU.
     simulation_kernel[
@@ -283,7 +284,7 @@ def simulate(growth_genotypes, state_genotypes, num_layers, base_layer, around_s
         # the CA world to compute, and the Y dimension is multiplied by
         # COLS_PER_THREAD to find the first column to start from.
         (WORLD_SIZE, COL_BATCH_SIZE)
-    ](d_growth_genotypes, d_state_genotypes, d_phenotypes, num_layers, base_layer, around_start, above_start, use_growth, activation)
+    ](d_growth_genotypes, d_state_genotypes, d_phenotypes, num_layers, base_layer, around_start, above_start, use_growth, activation, d_noise)
 
     # Copy output data from device memory to host memory.
     phenotypes = d_phenotypes.copy_to_host()
