@@ -60,8 +60,6 @@ class HillClimber:
         init_phenotypes = self.make_seed_phenotypes(unsimulated_growth_genotypes_children.shape[0])
         noise = self.generate_noise()
 
-        rand_id = list(self.children_population.keys())[0]
-
         ##### SIMULATE ON GPUs #####
         print(f'Starting {self.target_population_size} simulations...')
         children_phenotypes = simulate(
@@ -69,8 +67,8 @@ class HillClimber:
             unsimulated_state_genotypes_children, 
             self.n_layers, 
             self.base_layer,  
-            self.children_population[rand_id].around_start, 
-            self.children_population[rand_id].above_start, 
+            self.children_population[unsimulated_ids_children[0]].around_start, 
+            self.children_population[unsimulated_ids_children[0]].above_start, 
             self.use_growth, 
             init_phenotypes, 
             activation2int[self.activation],
@@ -123,7 +121,16 @@ class HillClimber:
         
         # Reduce the population by selecting parent or child to remove
         n_neutral_children = self.select()
+
+        # Extend the population by mutating the parents
+        mutation_data = self.mutate_population()
+
         self.n_neutral_over_generations.append(n_neutral_children)
+        self.mutation_data_over_generations.append(mutation_data)
+        self.best_fitness_history.append(self.best_solution())
+        self.mean_fitness_history.append(np.mean([sol.fitness for id, sol in self.parent_population.items()]))
+        self.parent_child_distance_history.append(parent_child_distances)
+
         print('num neutral mutations: ', n_neutral_children)
 
         print('Average fitness:',
@@ -132,14 +139,6 @@ class HillClimber:
               min([sol.fitness for id, sol in self.parent_population.items()]))
         print('Average age:',
               np.mean([sol.age for id, sol in self.parent_population.items()]))
-
-        # Extend the population by mutating the parents
-        mutation_data = self.mutate_population()
-
-        self.mutation_data_over_generations.append(mutation_data)
-        self.best_fitness_history.append(self.best_solution())
-        self.mean_fitness_history.append(np.mean([sol.fitness for id, sol in self.parent_population.items()]))
-        self.parent_child_distance_history.append(parent_child_distances)
 
     def initialize_population(self):
         # Initialize target_population_size random solutions
@@ -159,12 +158,11 @@ class HillClimber:
             if parent is not None:
                 if (child.phenotype == parent.phenotype).all():
                     n_neutral_children += 1
-                # if child.fitness == parent.fitness:
-                #     n_neutral_children += 1
                 if child.fitness <= parent.fitness:
                     del self.parent_population[parent_id]
                     self.parent_population[child_id] = child
             else:
+                # This only executes first generation
                 self.parent_population[child_id] = child
 
         return n_neutral_children
@@ -196,14 +194,6 @@ class HillClimber:
         }
         print(aggregate_mutation_data)
         return aggregate_mutation_data
-
-    def tournament_select(self):
-        """
-        Tournament selection randomly chooses two individuals from the population and
-        selects the better (based on a primary objective) of the two for reproduction/mutation
-        """
-        sol1, sol2 = np.random.choice(self.population, 2, replace=False)
-        return min(sol1, sol2)
 
 
     def get_children_genotypes(self):
