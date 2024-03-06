@@ -139,21 +139,21 @@ def look_up(num_layers, layer, phenotypes, genotypes, growth, up_weights_start, 
 
 @cuda.jit
 def get_spread_update(num_layers, layer, phenotypes, growth_genotypes, around_start, above_start, pop_idx, step, row, col):
-    up_spread_weighted_sum = look_up(num_layers, layer, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
-    up_spread_weighted_sum += look_around(layer, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
-    up_spread_weighted_sum += look_down(layer, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
+    up_spread_weighted_sum = look_up(num_layers, 0, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
+    up_spread_weighted_sum += look_around(0, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
+    up_spread_weighted_sum += look_down(0, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
     
-    down_spread_weighted_sum = look_up(num_layers, layer, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
-    down_spread_weighted_sum += look_around(layer, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
-    down_spread_weighted_sum += look_down(layer, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
+    down_spread_weighted_sum = look_up(num_layers, 1, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
+    down_spread_weighted_sum += look_around(1, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
+    down_spread_weighted_sum += look_down(1, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
     
-    left_spread_weighted_sum = look_up(num_layers, layer, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
-    left_spread_weighted_sum += look_around(layer, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
-    left_spread_weighted_sum += look_down(layer, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
+    left_spread_weighted_sum = look_up(num_layers, 2, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
+    left_spread_weighted_sum += look_around(2, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
+    left_spread_weighted_sum += look_down(2, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
     
-    right_spread_weighted_sum = look_up(num_layers, layer, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
-    right_spread_weighted_sum += look_around(layer, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
-    right_spread_weighted_sum += look_down(layer, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
+    right_spread_weighted_sum = look_up(num_layers, 3, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
+    right_spread_weighted_sum += look_around(3, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
+    right_spread_weighted_sum += look_down(3, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
 
     return (left_spread_weighted_sum > 0,
         right_spread_weighted_sum > 0,
