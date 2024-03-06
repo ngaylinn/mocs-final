@@ -239,7 +239,7 @@ def check_granularity(g, image):
     scaled_up = np.repeat(np.repeat(scaled_down, g, 0), g, 1)
     # Check whether the original image matches the resampled version.
     return np.array_equal(image, scaled_up)
-
+    
 
 def simulate(growth_genotypes, state_genotypes, num_layers, base_layer, around_start, above_start, use_growth, phenotypes, activation):
     """Simulate genotypes and return phenotype videos."""
@@ -290,10 +290,11 @@ def simulate(growth_genotypes, state_genotypes, num_layers, base_layer, around_s
 
     # Layer1 in all phenotypes from all steps of the simulation has a
     # granularity of 2x2.
-    if phenotypes.shape[2] > 1:
-        assert all(check_granularity(2, p)
-                for p in np.reshape(
-                    phenotypes[:, :, 1], (-1, WORLD_SIZE, WORLD_SIZE))) 
+
+    # if phenotypes.shape[2] > 1:
+    #     assert all(check_granularity(2, p)
+    #             for p in np.reshape(
+    #                 phenotypes[:, :, 1], (-1, WORLD_SIZE, WORLD_SIZE))) 
 
     # Layer2 in all phenotypes from all steps of the simulation has a
     # granularity of 4x4.

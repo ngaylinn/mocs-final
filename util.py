@@ -13,8 +13,8 @@ def create_hollow_circle(N):
     center_x2 = N // 2
     center_y2 = N // 2
 
-    radius_outer = N // 2.5
-    radius_inner = N // 5
+    radius_outer = N / 3
+    radius_inner = N / 8
 
     # Fill the array with a circle of ones
     for y in range(N):
