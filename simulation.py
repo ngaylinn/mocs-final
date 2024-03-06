@@ -96,7 +96,7 @@ def look_down(layer, phenotypes, genotypes, growth, down_weights_start, pop_idx,
             r = r % WORLD_SIZE
             c = c % WORLD_SIZE
             neighbor_state = phenotypes[pop_idx][step-1][layer-1][r][c]
-            weight = genotypes[pop_idx, layer][weight_index]
+            weight = genotypes[pop_idx, layer, weight_index]
             result += neighbor_state * weight
             weight_index += 1
     return result
@@ -121,7 +121,7 @@ def look_around(layer, phenotypes, genotypes, around_weights_start, pop_idx, ste
             r = r % WORLD_SIZE
             c = c % WORLD_SIZE
             neighbor_state = phenotypes[pop_idx][step-1][layer][r][c]
-            weight = genotypes[pop_idx, layer][weight_index]
+            weight = genotypes[pop_idx, layer, weight_index]
             result += neighbor_state * weight
             weight_index += 1
     return result
@@ -139,21 +139,21 @@ def look_up(num_layers, layer, phenotypes, genotypes, growth, up_weights_start, 
 
 @cuda.jit
 def get_spread_update(num_layers, layer, phenotypes, growth_genotypes, around_start, above_start, pop_idx, step, row, col):
-    up_spread_weighted_sum = look_up(num_layers, layer, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
-    up_spread_weighted_sum += look_around(layer, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
-    up_spread_weighted_sum += look_down(layer, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
+    up_spread_weighted_sum = look_up(num_layers, 0, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
+    up_spread_weighted_sum += look_around(0, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
+    up_spread_weighted_sum += look_down(0, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
     
-    down_spread_weighted_sum = look_up(num_layers, layer, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
-    down_spread_weighted_sum += look_around(layer, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
-    down_spread_weighted_sum += look_down(layer, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
+    down_spread_weighted_sum = look_up(num_layers, 1, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
+    down_spread_weighted_sum += look_around(1, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
+    down_spread_weighted_sum += look_down(1, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
     
-    left_spread_weighted_sum = look_up(num_layers, layer, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
-    left_spread_weighted_sum += look_around(layer, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
-    left_spread_weighted_sum += look_down(layer, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
+    left_spread_weighted_sum = look_up(num_layers, 2, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
+    left_spread_weighted_sum += look_around(2, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
+    left_spread_weighted_sum += look_down(2, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
     
-    right_spread_weighted_sum = look_up(num_layers, layer, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
-    right_spread_weighted_sum += look_around(layer, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
-    right_spread_weighted_sum += look_down(layer, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
+    right_spread_weighted_sum = look_up(num_layers, 3, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
+    right_spread_weighted_sum += look_around(3, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
+    right_spread_weighted_sum += look_down(3, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
 
     return (left_spread_weighted_sum > 0,
         right_spread_weighted_sum > 0,
@@ -173,6 +173,9 @@ def update_cell(num_layers, layer, use_growth, phenotypes, growth_genotypes, sta
     signal_sum = down_signal_sum + around_signal_sum + up_signal_sum
 
     # Update cells to be alive if on L=0 (only if current cell is actually alive)
+    
+
+
     alive = phenotypes[pop_idx][step][layer][row][col] != 0
     if layer == base_layer and alive and use_growth:
         # Spread to nearby cells... is this necessary?
@@ -187,9 +190,12 @@ def update_cell(num_layers, layer, use_growth, phenotypes, growth_genotypes, sta
         if down:
             phenotypes[pop_idx][step][layer][((row+1) % WORLD_SIZE)][(col % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
 
+
+
     # Actually update the phenotype state for step on layer1 at (row, col).
     # if activation == ACTIVATION_SIGMOID:
     phenotypes[pop_idx][step][layer][row][col] = max(0, min(activate_sigmoid(signal_sum) + noise[step, layer, row, col], 1.0))
+    # phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
     # elif activation == ACTIVATION_TANH:
     #     phenotypes[pop_idx][step][layer][row][col] = activate_tanh(signal_sum)
     # elif activation == ACTIVATION_RELU:

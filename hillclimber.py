@@ -55,7 +55,7 @@ class HillClimber:
         # Actually run the simulations, and time how long it takes.
         start = time.perf_counter()
 
-        unsimulated_growth_genotypes_children, unsimulated_state_genotypes_children, unsimulated_ids_children = self.get_unsimulated_genotypes()
+        unsimulated_growth_genotypes_children, unsimulated_state_genotypes_children, unsimulated_ids_children = self.get_children_genotypes()
         growth_genotypes_parents, state_genotypes_parents, parent_ids = self.get_parent_genotypes()
         init_phenotypes = self.make_seed_phenotypes(unsimulated_growth_genotypes_children.shape[0])
         noise = self.generate_noise()
@@ -78,6 +78,7 @@ class HillClimber:
         
         # Resimulate parents with new noise
         # i.e. if you want to stick around in the population, you have to endure the noise
+        
         if len(self.parent_population) > 0:
             print(f'Resimulating parents...')
             parent_phenotypes = simulate(
@@ -92,9 +93,15 @@ class HillClimber:
                 activation2int[self.activation],
                 noise)
             parent_fitness_scores = self.evaluate_phenotypes(parent_phenotypes)
+            n_same_phenotype = 0
             for i, id in enumerate(parent_ids):
+                if (self.parent_population[id].phenotype == (parent_phenotypes[i][-1][self.base_layer] > 0)).all():
+                    n_same_phenotype += 1
                 self.parent_population[id].set_fitness(parent_fitness_scores[i])
                 self.parent_population[id].set_phenotype(parent_phenotypes[i][-1][self.base_layer] > 0)
+
+            print(len(parent_ids), ' parents resimulated')
+            print('num same phenotype: ', n_same_phenotype)
 
         elapsed = time.perf_counter() - start
         lps = (self.target_population_size*2) / elapsed
@@ -105,24 +112,28 @@ class HillClimber:
         # Set the fitness and simulated flag for each of the just-evaluated solutions
         for i, id in enumerate(unsimulated_ids_children):
             self.children_population[id].set_fitness(children_fitness_scores[i])
-            self.children_population[id].set_simulated(True)
             self.children_population[id].set_phenotype(children_phenotypes[i][-1][self.base_layer] > 0) # phenotype is now binarized last step of base layer
+            # self.children_population[id].set_simulated(True)
+            
             # Get actual parent Solution object from population using parent_id
             parent_id = self.children_population[id].parent_id
             parent = self.parent_population[parent_id] if parent_id is not None else None
             if parent is not None:
                 parent_child_distances.append(self.children_population[id].get_distance_from_parent(parent))
-            
-        print('Average fitness:',
-              np.mean([sol.fitness for id, sol in self.children_population.items()]),
-              ', Min fitness: ',
-              min([sol.fitness for id, sol in self.children_population.items()]))
-        print('Average age:',
-              np.mean([sol.age for id, sol in self.children_population.items()]))
+        
         # Reduce the population by selecting parent or child to remove
         n_neutral_children = self.select()
         self.n_neutral_over_generations.append(n_neutral_children)
-        # Extend the population using tournament selection
+        print('num neutral mutations: ', n_neutral_children)
+
+        print('Average fitness:',
+              np.mean([sol.fitness for id, sol in self.parent_population.items()]),
+              ', Min fitness: ',
+              min([sol.fitness for id, sol in self.parent_population.items()]))
+        print('Average age:',
+              np.mean([sol.age for id, sol in self.parent_population.items()]))
+
+        # Extend the population by mutating the parents
         mutation_data = self.mutate_population()
 
         self.mutation_data_over_generations.append(mutation_data)
@@ -136,17 +147,6 @@ class HillClimber:
             new_id = self.get_available_id()
             self.children_population[new_id] = Solution(layers=self.layers, id=new_id)
 
-    def generate_new_individuals(self):
-        new_individuals = []
-        # 1 - Breed: do tournament selection
-        # The minus one is to make room for one random individual at the end.
-        for _ in range(self.target_population_size - 1):
-            # Randomly select an individual using tournament selection
-            parent = self.tournament_select()
-            new_individuals.append(parent.make_offspring(self.get_available_id()))
-
-        return new_individuals
-
     def select(self):
         """
         Look through children, compare fitness with parents, keep the best of the two.
@@ -157,8 +157,10 @@ class HillClimber:
             parent_id = child.parent_id
             parent = self.parent_population[parent_id] if parent_id is not None else None
             if parent is not None:
-                if child.fitness == parent.fitness:
+                if (child.phenotype == parent.phenotype).all():
                     n_neutral_children += 1
+                # if child.fitness == parent.fitness:
+                #     n_neutral_children += 1
                 if child.fitness <= parent.fitness:
                     del self.parent_population[parent_id]
                     self.parent_population[child_id] = child
@@ -176,15 +178,23 @@ class HillClimber:
         self.children_population = {}
         # Make a new child from every parent
         for id, solution in self.parent_population.items():
-            child = solution.make_offspring(id, mutate_layers=self.mutate_layers, state_or_growth=self.state_or_growth)
+            new_id = self.get_available_id()
+            child = solution.make_offspring(new_id, mutate_layers=self.mutate_layers, state_or_growth=self.state_or_growth)
             mutation_data.append(child.mutation_info)
-            self.children_population[id] = child
+            self.children_population[new_id] = child
+
+            # print((solution.growth_genotype == child.growth_genotype).all())
+            # print((solution.state_genotype == child.state_genotype).all())
+            # print(child.mutation_info)
+
+            # print(solution.state_genotype, child.state_genotype)
 
         aggregate_mutation_data = {
             'type': dict(Counter([mutation_info['type'] for mutation_info in mutation_data])),
             'kind': dict(Counter([mutation_info['kind'] for mutation_info in mutation_data])),
             'layer': dict(Counter([mutation_info['layer'] for mutation_info in mutation_data])),
         }
+        print(aggregate_mutation_data)
         return aggregate_mutation_data
 
     def tournament_select(self):
@@ -196,17 +206,11 @@ class HillClimber:
         return min(sol1, sol2)
 
 
-    def get_unsimulated_genotypes(self):
+    def get_children_genotypes(self):
         # Filter out just the genotypes that haven't been simulated yet.
-        unsimulated_growth_genotypes = [
-            sol.growth_genotype for _, sol in self.children_population.items() if not sol.been_simulated
-        ]
-        unsimulated_state_genotypes = [
-            sol.state_genotype for _, sol in self.children_population.items() if not sol.been_simulated
-        ]
-        unsimulated_ids = [
-            id for id, sol in self.children_population.items() if not sol.been_simulated
-        ]
+        unsimulated_growth_genotypes = [sol.growth_genotype for _, sol in self.children_population.items()]
+        unsimulated_state_genotypes = [sol.state_genotype for _, sol in self.children_population.items()]
+        unsimulated_ids = [id for id, sol in self.children_population.items()]
         # Aggregate the genotypes into a single matrix for simulation
         return np.array(unsimulated_growth_genotypes, dtype=np.float32), np.array(unsimulated_state_genotypes, dtype=np.float32), unsimulated_ids
     

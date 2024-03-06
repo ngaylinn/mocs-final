@@ -1,5 +1,6 @@
 import functools
 import time
+import copy
 import pickle
 
 import numpy as np
@@ -31,9 +32,15 @@ class Solution:
         self.randomize_genome()
 
     def make_offspring(self, new_id, mutate_layers=None, state_or_growth=None):
-        child = Solution(layers=self.layers, id=new_id, parent_id=self.id)
-        child.state_genotype = self.state_genotype # .copy()
-        child.growth_genotype = self.growth_genotype # .copy()
+        # child = Solution(layers=self.layers, id=new_id, parent_id=self.id)
+        # child.state_genotype = self.state_genotype # .copy()
+        # child.growth_genotype = self.growth_genotype # .copy()
+        child = copy.deepcopy(self)
+        child.parent_id = self.id
+        child.id = new_id
+        child.phenotype = None
+        child.fitness = None
+
         if mutate_layers is None:
             child.mutate()
         else:
