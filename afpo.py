@@ -13,7 +13,7 @@ activation2int = {
     'relu': ACTIVATION_RELU
 }
 
-N_RANDOM_INDIVIDUALS = 10
+N_RANDOM_INDIVIDUALS = 100
 
 @functools.total_ordering # Sortable by fitness
 class Solution:
