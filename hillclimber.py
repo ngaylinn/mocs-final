@@ -117,17 +117,6 @@ class HillClimber:
             new_id = self.get_available_id()
             self.children_population[new_id] = Solution(layers=self.layers, id=new_id)
 
-    def generate_new_individuals(self):
-        new_individuals = []
-        # 1 - Breed: do tournament selection
-        # The minus one is to make room for one random individual at the end.
-        for _ in range(self.target_population_size - 1):
-            # Randomly select an individual using tournament selection
-            parent = self.tournament_select()
-            new_individuals.append(parent.make_offspring(self.get_available_id()))
-
-        return new_individuals
-
     def select(self):
         """
         Look through children, compare fitness with parents, keep the best of the two.
@@ -167,14 +156,6 @@ class HillClimber:
             'layer': dict(Counter([mutation_info['layer'] for mutation_info in mutation_data])),
         }
         return aggregate_mutation_data
-
-    def tournament_select(self):
-        """
-        Tournament selection randomly chooses two individuals from the population and
-        selects the better (based on a primary objective) of the two for reproduction/mutation
-        """
-        sol1, sol2 = np.random.choice(self.population, 2, replace=False)
-        return min(sol1, sol2)
 
 
     def get_unsimulated_genotypes(self):
