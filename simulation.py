@@ -199,27 +199,27 @@ def update_cell(num_layers, layer, use_growth, phenotypes, growth_genotypes, sta
     signal_sum = down_signal_sum + around_signal_sum + up_signal_sum
 
     # Update cells to be alive if on L=0 (only if current cell is actually alive)
-    alive = phenotypes[pop_idx][step][layer][row][col] != 0
-    if layer == base_layer and alive and use_growth:
-        # Spread to nearby cells... is this necessary?
-        (left, right, up, down) = get_spread_update(num_layers, base_layer, phenotypes, growth_genotypes, around_start, above_start, pop_idx, step, row, col, above_map, below_map)
+    # alive = phenotypes[pop_idx][step][layer][row][col] != 0
+    # if layer == base_layer and alive and use_growth:
+    #     # Spread to nearby cells... is this necessary?
+    #     (left, right, up, down) = get_spread_update(num_layers, base_layer, phenotypes, growth_genotypes, around_start, above_start, pop_idx, step, row, col)
                 
-        if left:
-            phenotypes[pop_idx][step][layer][(row % WORLD_SIZE)][((col-1) % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
-        if right:
-            phenotypes[pop_idx][step][layer][(row % WORLD_SIZE)][((col+1) % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
-        if up:
-            phenotypes[pop_idx][step][layer][((row-1) % WORLD_SIZE)][(col % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
-        if down:
-            phenotypes[pop_idx][step][layer][((row+1) % WORLD_SIZE)][(col % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
+    #     if left:
+    #         phenotypes[pop_idx][step][layer][(row % WORLD_SIZE)][((col-1) % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
+    #     if right:
+    #         phenotypes[pop_idx][step][layer][(row % WORLD_SIZE)][((col+1) % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
+    #     if up:
+    #         phenotypes[pop_idx][step][layer][((row-1) % WORLD_SIZE)][(col % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
+    #     if down:
+    #         phenotypes[pop_idx][step][layer][((row+1) % WORLD_SIZE)][(col % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
 
     # Actually update the phenotype state for step on layer1 at (row, col).
-    if activation == ACTIVATION_SIGMOID:
-        phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
-    elif activation == ACTIVATION_TANH:
-        phenotypes[pop_idx][step][layer][row][col] = activate_tanh(signal_sum)
-    elif activation == ACTIVATION_RELU:
-        phenotypes[pop_idx][step][layer][row][col] = activate_relu(signal_sum)
+    # if activation == ACTIVATION_SIGMOID:
+    phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
+    # elif activation == ACTIVATION_TANH:
+    #     phenotypes[pop_idx][step][layer][row][col] = activate_tanh(signal_sum)
+    # elif activation == ACTIVATION_RELU:
+    #     phenotypes[pop_idx][step][layer][row][col] = activate_relu(signal_sum)
         
 
 # Max registers can be tuned per device. 64 is the most my laptop can handle.
