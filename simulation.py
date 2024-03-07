@@ -119,7 +119,7 @@ def look_down(layer, phenotypes, genotypes, down_weights_start, pop_idx, step, r
 
 
 @cuda.jit
-def look_up(num_layers, layer, phenotypes, genotypes, up_weights_start, pop_idx, step, row, col):
+def look_up(num_layers, layer, phenotypes, genotypes, up_weights_start, pop_idx, step, row, col, above_map):
     """Compute the weighted sum of this cell's neighbors in the layer above."""
     if layer == num_layers - 1:
         return 0

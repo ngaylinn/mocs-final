@@ -17,9 +17,9 @@ params = {
     'shape': 'square',
     'layers': [
         {'res': 1},
-        {'res': 2, 'base': True},
+        {'res': 2},
         {'res': 4},
-        {'res': 8}
+        {'res': 8, 'base': True}
     ],
     'use_growth': True,
     'activation': 'sigmoid'
