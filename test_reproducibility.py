@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from afpo import AgeFitnessPareto, activation2int
-from simulation import simulate
+from simulation import NUM_STEPS, simulate
 
 params = {
     'optimizer': 'hillclimber',
@@ -87,39 +87,30 @@ for i, idx in enumerate(unsimulated_indices):
 ###### Evaluate phenotypic difference ######
 # (This evaluates the match between values of *all* grid cells at all timesteps) 
 n_different = 0
+sum_diff = 0
+max_diff = 0
 for i in range(len(fitness_scores_2)):
     if not (phenotypes_2[i] == phenotypes_1[i]).all():
         n_different += 1
-        ###### Plot divergence of values #########
-        # phenotypes_1[i] phenotypes_2[i]
+        diff = np.abs(phenotypes_2[i] - phenotypes_1[i])
+        sum_diff += np.sum(diff)
+        if np.max(diff) > max_diff:
+            max_diff = np.max(diff)
 
-        # divergence = [np.sum(phenotypes_1[i, t] - phenotypes_2[i,t]) for t in range(params['sim_steps'])]
+print('num diff: ', n_different)
+print('avg diff: ', sum_diff / n_different)
+print('max diff: ', max_diff)
 
-        # print(state_genotypes[i], state_genotypes_2[i])
-        # print(phenotypes_1[i,2,afpo.base_layer,::8, ::8])
-        # print(phenotypes_2[i,2,afpo.base_layer,::8, ::8])
-        # print(afpo.population[0].above_start)
-        # print(afpo.population[0].around_start)
-
-        # plt.plot(range(params['sim_steps']), divergence)
-        # plt.show()
-        # exit()
+for step in range(NUM_STEPS):
+    num_different = 0
+    diff_magnitude = 0.0
+    for i in range(len(fitness_scores_2)):
+        diff = np.sum(np.abs(phenotypes_2[i, step] - phenotypes_1[i, step]))
+        if diff > 0:
+            num_different += 1
+            diff_magnitude += diff
+    if num_different:
+        print(f'Step {step}: {num_different} phenotypes differ, '
+              f'by {diff_magnitude / num_different} on average.')
     else:
-        print((fitness_scores_1[i], fitness_scores_2[i]))
-
-        if fitness_scores_2[i] != 2048 and fitness_scores_2[i] != 3072:
-              print(fitness_scores_2[i])
-              print(phenotypes_2[i,-1,afpo.base_layer,::8, ::8])
-              print(phenotypes_1[i,-1,afpo.base_layer,::8, ::8])
-            #   exit()
-
-
-
-print('num diff phenotype: ', n_different)
-
-n_different = 0
-for i in range(len(fitness_scores_2)):
-    if not (fitness_scores_1[i] == fitness_scores_2[i]):
-        n_different += 1
-        
-print('num diff fitness: ', n_different)
+        print(f'Step {step}: no diffs!')
