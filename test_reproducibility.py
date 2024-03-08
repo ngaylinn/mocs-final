@@ -101,22 +101,18 @@ print('num diff: ', n_different)
 print('avg diff: ', sum_diff / n_different)
 print('max diff: ', max_diff)
 
-<<<<<<< HEAD
 sample_a, sample_b = None, None
-=======
->>>>>>> 909cc5b (Add more detailed analysis of diffs.)
+
 for step in range(NUM_STEPS):
     num_different = 0
     diff_magnitude = 0.0
     for i in range(len(fitness_scores_2)):
         diff = np.sum(np.abs(phenotypes_2[i, step] - phenotypes_1[i, step]))
         if diff > 0:
-<<<<<<< HEAD
+
             if sample_a is None:
                 sample_a = phenotypes_1[i]
                 sample_b = phenotypes_2[i]
-=======
->>>>>>> 909cc5b (Add more detailed analysis of diffs.)
             num_different += 1
             diff_magnitude += diff
     if num_different:
@@ -124,8 +120,6 @@ for step in range(NUM_STEPS):
               f'by {diff_magnitude / num_different} on average.')
     else:
         print(f'Step {step}: no diffs!')
-<<<<<<< HEAD
-
 for step in range(NUM_STEPS):
     diffs = 0
     for layer in range(4):
@@ -139,5 +133,3 @@ for step in range(NUM_STEPS):
                     diffs += 1
     if diffs > 0:
         break
-=======
->>>>>>> 909cc5b (Add more detailed analysis of diffs.)
