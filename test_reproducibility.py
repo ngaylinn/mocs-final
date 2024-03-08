@@ -1,7 +1,7 @@
 import numpy as np
 
 from afpo import AgeFitnessPareto, activation2int
-from simulation import NUM_STEPS, simulate
+from simulation import NUM_STEPS, WORLD_SIZE, simulate
 
 params = {
     'optimizer': 'hillclimber',
@@ -91,22 +91,23 @@ for i in range(len(fitness_scores_2)):
         n_different += 1
         diff = np.abs(phenotypes_2[i] - phenotypes_1[i])
         sum_diff += np.sum(diff)
-<<<<<<< HEAD
         if np.max(diff) > max_diff:
             max_diff = np.max(diff)
-=======
->>>>>>> fa298d0a7904804b3320226dbb4f55459a07e7ac
 
 print('num diff: ', n_different)
 print('avg diff: ', sum_diff / n_different)
 print('max diff: ', max_diff)
 
+sample_a, sample_b = None, None
 for step in range(NUM_STEPS):
     num_different = 0
     diff_magnitude = 0.0
     for i in range(len(fitness_scores_2)):
         diff = np.sum(np.abs(phenotypes_2[i, step] - phenotypes_1[i, step]))
         if diff > 0:
+            if sample_a is None:
+                sample_a = phenotypes_1[i]
+                sample_b = phenotypes_2[i]
             num_different += 1
             diff_magnitude += diff
     if num_different:
@@ -114,3 +115,17 @@ for step in range(NUM_STEPS):
               f'by {diff_magnitude / num_different} on average.')
     else:
         print(f'Step {step}: no diffs!')
+
+for step in range(NUM_STEPS):
+    diffs = 0
+    for layer in range(4):
+        for row in range(WORLD_SIZE):
+            for col in range(WORLD_SIZE):
+                val_a = sample_a[step, layer, row, col]
+                val_b = sample_b[step, layer, row, col]
+                if val_a != val_b:
+                    print(f'step {step}, layer {layer}, row {row}, col {col}: '
+                          f'{val_a} != {val_b})')
+                    diffs += 1
+    if diffs > 0:
+        break
