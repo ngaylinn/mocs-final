@@ -91,8 +91,11 @@ for i in range(len(fitness_scores_2)):
         n_different += 1
         diff = np.abs(phenotypes_2[i] - phenotypes_1[i])
         sum_diff += np.sum(diff)
+<<<<<<< HEAD
         if np.max(diff) > max_diff:
             max_diff = np.max(diff)
+=======
+>>>>>>> fa298d0a7904804b3320226dbb4f55459a07e7ac
 
 print('num diff: ', n_different)
 print('avg diff: ', sum_diff / n_different)
