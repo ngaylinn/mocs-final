@@ -170,7 +170,6 @@ def update_cell(num_layers, layer, phenotypes, state_genotypes, around_start, ab
     signal_sum = around_signal_sum + down_signal_sum + up_signal_sum #  + up_signal_sum
 
     phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
-
         
 
 # Max registers can be tuned per device. 64 is the most my laptop can handle.
@@ -190,7 +189,6 @@ def simulation_kernel(state_genotypes, phenotypes, num_layers, around_start, abo
         for col in range(start_col, start_col + COLS_PER_THREAD):
             # Update the state in every layer this individual uses.
             for layer in range(0, num_layers):
-
                 update_cell(num_layers, layer, phenotypes, state_genotypes, around_start, above_start, pop_idx, step, row, col, above_map, below_map)
         # Make sure all threads have finished computing this step before going
         # on to the next one.
