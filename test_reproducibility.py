@@ -133,4 +133,3 @@ for step in range(NUM_STEPS):
                     diffs += 1
     if diffs > 0:
         break
->>>>>>> d7a2c1bb0bd57de2475e04c49efefad09b6d5c02
