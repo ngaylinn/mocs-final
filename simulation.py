@@ -101,8 +101,8 @@ def look_down(layer, phenotypes, genotypes, down_weights_start, pop_idx, step, r
 
     # Look at all the cells that occupy "the same position" as this cell but
     # one layer down.
-    # for r in range((row // g)*g, (row // g)*g + g):
-    #     for c in range((col // g)*g, (col // g)*g + g):
+    # for r in range((row // g)*g, (row // g)*g + g, g):
+    #     for c in range((col // g)*g, (col // g)*g + g, g):
     #         # Do wrap-around bounds checking. This may be inefficient, since
     #         # we're doing extra modulus operations and working on
     #         # non-contiguous memory may prevent coallesced reads. However, it's
