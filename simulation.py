@@ -74,7 +74,7 @@ def activate_relu(weighted_sum):
 
 
 @cuda.jit
-def look_down(layer, phenotypes, genotypes, down_weights_start, pop_idx, step, row, col):
+def look_down(layer, phenotypes, genotypes, down_weights_start, pop_idx, step, row, col, below_map):
     """Compute the weighted sum of this cell's neighbors in the layer below."""
     if layer == 0:
         return 0
@@ -84,27 +84,42 @@ def look_down(layer, phenotypes, genotypes, down_weights_start, pop_idx, step, r
 
     weight_index = down_weights_start
     result = 0
+
+    for i in range(4):
+        # Look at the cell that occupies "the same position" as this cell but
+        # one layer down.
+        new_layer = below_map[layer][i][0]
+        new_layer_g = 1 << new_layer
+        new_row = ((((row // g)*g) + ((below_map[layer][i][1] // new_layer_g)*new_layer_g)) % WORLD_SIZE) # // new_layer_g
+        new_col = ((((col // g)*g) + ((below_map[layer][i][2] // new_layer_g)*new_layer_g)) % WORLD_SIZE) # // new_layer_g
+        # new_row = (row + below_map[layer][i][1]) % WORLD_SIZE
+        # new_col = (col + below_map[layer][i][2]) % WORLD_SIZE
+        neighbor_state = phenotypes[pop_idx][step-1][new_layer][new_row][new_col]
+        weight = genotypes[pop_idx, layer][weight_index]
+        result += neighbor_state * weight
+        weight_index += 1
+
     # Look at all the cells that occupy "the same position" as this cell but
     # one layer down.
-    for r in range((row // g)*g, (row // g)*g + g, g//2):
-        for c in range((col // g)*g, (col // g)*g + g, g//2):
-            # Do wrap-around bounds checking. This may be inefficient, since
-            # we're doing extra modulus operations and working on
-            # non-contiguous memory may prevent coallesced reads. However, it's
-            # simple, and avoids complications when working with different
-            # granularities.
-            r = r % WORLD_SIZE
-            c = c % WORLD_SIZE
-            neighbor_state = phenotypes[pop_idx][step-1][layer-1][r][c]
-            weight = genotypes[pop_idx, layer][weight_index]
-            result += neighbor_state * weight
-            weight_index += 1
+    # for r in range((row // g)*g, (row // g)*g + g):
+    #     for c in range((col // g)*g, (col // g)*g + g):
+    #         # Do wrap-around bounds checking. This may be inefficient, since
+    #         # we're doing extra modulus operations and working on
+    #         # non-contiguous memory may prevent coallesced reads. However, it's
+    #         # simple, and avoids complications when working with different
+    #         # granularities.
+    #         r = r % WORLD_SIZE
+    #         c = c % WORLD_SIZE
+    #         neighbor_state = phenotypes[pop_idx][step-1][layer-1][r][c]
+    #         weight = genotypes[pop_idx, layer][weight_index]
+    #         result += neighbor_state * weight
+    #         weight_index += 1
     return result
     # return 0.5
 
 
 @cuda.jit
-def look_up(num_layers, layer, phenotypes, genotypes, up_weights_start, pop_idx, step, row, col):
+def look_up(num_layers, layer, phenotypes, genotypes, up_weights_start, pop_idx, step, row, col, above_map):
     """Compute the weighted sum of this cell's neighbors in the layer above."""
     if layer == num_layers - 1:
         return 0
@@ -145,23 +160,21 @@ def look_around(layer, phenotypes, genotypes, around_weights_start, pop_idx, ste
 
 
 @cuda.jit
-def update_cell(num_layers, layer, phenotypes, state_genotypes, around_start, above_start, pop_idx, step, row, col):
+def update_cell(num_layers, layer, phenotypes, state_genotypes, around_start, above_start, pop_idx, step, row, col, above_map, below_map):
     """Compute the next state for a single cell in layer0 from prev states."""
-
     # Calculate the weighted sum of all neighbors.
-    down_signal_sum = look_down(layer, phenotypes, state_genotypes, 0, pop_idx, step, row, col) # Should return 0 for L=0
-    around_signal_sum = look_around(layer, phenotypes, state_genotypes, around_start, pop_idx, step, row, col) 
-    up_signal_sum = look_up(num_layers, layer, phenotypes, state_genotypes, above_start, pop_idx, step, row, col)
+    down_signal_sum = look_down(layer, phenotypes, state_genotypes, 0, pop_idx, step, row, col, below_map) # Should return 0 for L=0
+    around_signal_sum = look_around(layer, phenotypes, state_genotypes, around_start, pop_idx, step, row, col)
+    up_signal_sum = look_up(num_layers, layer, phenotypes, state_genotypes, above_start, pop_idx, step, row, col, above_map)
 
     signal_sum = around_signal_sum + down_signal_sum + up_signal_sum #  + up_signal_sum
 
     phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
-
         
 
 # Max registers can be tuned per device. 64 is the most my laptop can handle.
 @cuda.jit(max_registers=64)
-def simulation_kernel(state_genotypes, phenotypes, num_layers, around_start, above_start):
+def simulation_kernel(state_genotypes, phenotypes, num_layers, around_start, above_start, above_map, below_map):
     """Compute and record the full development process of a population."""
     # Compute indices for this thread.
     pop_idx = cuda.blockIdx.x
@@ -176,7 +189,7 @@ def simulation_kernel(state_genotypes, phenotypes, num_layers, around_start, abo
         for col in range(start_col, start_col + COLS_PER_THREAD):
             # Update the state in every layer this individual uses.
             for layer in range(0, num_layers):
-                update_cell(num_layers, layer, phenotypes, state_genotypes, around_start, above_start, pop_idx, step, row, col)
+                update_cell(num_layers, layer, phenotypes, state_genotypes, around_start, above_start, pop_idx, step, row, col, above_map, below_map)
         # Make sure all threads have finished computing this step before going
         # on to the next one.
         cuda.syncthreads()
@@ -201,10 +214,15 @@ def check_granularity(g, image):
     # Scale back up by repeating every cell g times in both dimensions.
     scaled_up = np.repeat(np.repeat(scaled_down, g, 0), g, 1)
     # Check whether the original image matches the resampled version.
-    return np.array_equal(image, scaled_up)
+    if np.array_equal(image, scaled_up):
+        return True
+    else:
+        print('aint equal: ', image, scaled_up)
+        return False
+    # return np.array_equal(image, scaled_up)
 
 
-def simulate(growth_genotypes, state_genotypes, num_layers, base_layer, around_start, above_start, use_growth, phenotypes, activation):
+def simulate(growth_genotypes, state_genotypes, num_layers, base_layer, around_start, above_start, use_growth, phenotypes, activation, below_map, above_map):
     """Simulate genotypes and return phenotype videos."""
 
     # Infer population size from genotypes
@@ -231,10 +249,15 @@ def simulate(growth_genotypes, state_genotypes, num_layers, base_layer, around_s
 
     assert phenotypes.shape == (
         pop_size, NUM_STEPS, num_layers, WORLD_SIZE, WORLD_SIZE)
+    
+    assert above_map.shape == (num_layers, 3)
+    assert below_map.shape == (num_layers, 4, 3)
 
     # Copy input data from host memory to device memory.
-    d_phenotypes = cuda.to_device(phenotypes.astype(np.float32))
-    d_state_genotypes = cuda.to_device(state_genotypes.astype(np.float32))
+    d_phenotypes = cuda.to_device(phenotypes)
+    d_state_genotypes = cuda.to_device(state_genotypes)
+    d_below_map = cuda.to_device(below_map)
+    d_above_map = cuda.to_device(above_map)
 
     # Actually run the simulation for all individuals in parallel on the GPU.
     simulation_kernel[
@@ -245,13 +268,11 @@ def simulate(growth_genotypes, state_genotypes, num_layers, base_layer, around_s
         # the CA world to compute, and the Y dimension is multiplied by
         # COLS_PER_THREAD to find the first column to start from.
         (WORLD_SIZE, COL_BATCH_SIZE)
-    ](d_state_genotypes, d_phenotypes, num_layers, around_start, above_start)
-
-    # simulation_kernel(state_genotypes, phenotypes, num_layers, around_start, above_start)
+    ](d_state_genotypes, d_phenotypes, num_layers, around_start, above_start, d_above_map, d_below_map)
 
     # Copy output data from device memory to host memory.
     phenotypes = d_phenotypes.copy_to_host()
-
+        
     # Layer1 in all phenotypes from all steps of the simulation has a
     # granularity of 2x2.
     if phenotypes.shape[2] > 1:

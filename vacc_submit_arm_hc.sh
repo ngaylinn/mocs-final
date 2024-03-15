@@ -15,4 +15,4 @@ echo $2
 echo $3
 echo $4
 
-python3 -O run_trial.py "$1" "$2" "$3" "$4"
+python3 run_trial_hillclimber.py "$1" "$2" "$3" "$4"

@@ -30,16 +30,16 @@ class Solution:
         self.mutation_info = None
         self.randomize_genome()
 
-    def make_offspring(self, new_id, mutate_layer=None, state_or_growth=None):
+    def make_offspring(self, new_id, mutate_layers=None, state_or_growth=None):
         child = Solution(layers=self.layers, id=new_id, parent_id=self.id)
         child.state_genotype = self.state_genotype # .copy()
         child.growth_genotype = self.growth_genotype # .copy()
-        if mutate_layer == None:
-            child.mutate(mutate_layer)
-        else: 
-            assert mutate_layer in range(self.n_layers)
+        if mutate_layers is None:
+            child.mutate()
+        else:
+            assert [l in range(self.n_layers) for l in mutate_layers]
             assert state_or_growth is not None
-            child.mutate_layer(mutate_layer, state_or_growth=state_or_growth)
+            child.mutate_layers(mutate_layers, state_or_growth=state_or_growth)
             
         return child
 
@@ -58,11 +58,12 @@ class Solution:
     def get_fitness(self):
         return self.fitness
     
-    def mutate_layer(self, layer, state_or_growth='state'):
+    def mutate_layers(self, layers, state_or_growth='state'):
         """
         Mutate a specific layer's genome by one weight
         """
         if state_or_growth == 'state':
+            layer = np.random.choice(layers)
             random_nonzero_indices = np.transpose(np.nonzero(self.state_genotype[layer]))
             c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))][0]
             self.state_genotype[layer, c] = np.random.random() * 2 - 1
@@ -71,7 +72,8 @@ class Solution:
             r, c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))]
             self.growth_genotype[r, c] = np.random.random() * 2 - 1
 
-        below_range, around_range, above_range = self.get_layer_state_indices(layer)
+        L = layer if state_or_growth == 'state' else r
+        below_range, around_range, above_range = self.get_layer_state_indices(L)
         if c in range(*below_range):
             kind = 'below'
         elif c in range(*around_range):
@@ -80,7 +82,7 @@ class Solution:
             kind = 'above'
         else:
             kind = None
-        self.mutation_info = {'type': state_or_growth, 'kind': kind, 'layer': layer}
+        self.mutation_info = {'type': state_or_growth, 'kind': kind, 'layer': layer, 'rc': (layer if state_or_growth == 'state' else r, c)}
         
 
     def mutate(self):
@@ -202,6 +204,7 @@ class AgeFitnessPareto:
         self.use_growth = experiment_constants['use_growth']
         self.activation = experiment_constants['activation']
         self.shape = experiment_constants['shape']
+        self.neighbor_map_type = experiment_constants['neighbor_map_type'] # 'spatial' or 'random'
 
         self.n_layers = len(self.layers)
         self.base_layer = next((i for i, d in enumerate(self.layers) if d.get('base', False)), None)
@@ -211,6 +214,9 @@ class AgeFitnessPareto:
 
         self.best_fitness_history = []
         self.parent_child_distance_history = []
+
+        self.below_map = self.initialize_below_map()
+        self.above_map = self.initialize_above_map()
 
     def evolve(self):
         self.initialize_population()
@@ -239,7 +245,9 @@ class AgeFitnessPareto:
             self.population[0].above_start, 
             self.use_growth, 
             init_phenotypes, 
-            activation2int[self.activation])
+            activation2int[self.activation],
+            self.below_map,
+            self.above_map)
 
         elapsed = time.perf_counter() - start
         lps = self.target_population_size / elapsed
@@ -403,7 +411,37 @@ class AgeFitnessPareto:
             phenotypes[i][0][self.base_layer][middle_start:middle_end, middle_start:middle_end] = ALIVE
 
         return phenotypes
+    
+    def initialize_below_map(self):
+        below_map = np.zeros((self.n_layers, 4, 3)).astype(int)
+        if self.neighbor_map_type == 'random':
+            for l in range(self.n_layers):
+                rand_l = np.random.randint(self.n_layers)
+                rand_r_offset = np.random.randint(WORLD_SIZE)
+                rand_c_offset = np.random.randint(WORLD_SIZE)
+                below_map[l, 0] = [rand_l, rand_r_offset, rand_c_offset]
+        else:
+            for l in range(self.n_layers):
+                below_map[l, 0] = [l-1, 0, 0]
+                below_map[l, 1] = [l-1, 0, 1]
+                below_map[l, 2] = [l-1, 1, 0]
+                below_map[l, 3] = [l-1, 1, 1]
 
+        return below_map
+    
+    def initialize_above_map(self):
+        above_map = np.zeros((self.n_layers, 3)).astype(int)
+        if self.neighbor_map_type == 'random':
+            for l in range(self.n_layers):
+                rand_l = np.random.randint(self.n_layers)
+                rand_r_offset = np.random.randint(WORLD_SIZE)
+                rand_c_offset = np.random.randint(WORLD_SIZE)
+                above_map[l] = [rand_l, rand_r_offset, rand_c_offset]
+        else:
+            for l in range(self.n_layers):
+                above_map[l] = [l+1, 0, 0]
+
+        return above_map
 
     def pickle_afpo(self, pickle_file_name):
         with open(pickle_file_name, 'wb') as pf:
