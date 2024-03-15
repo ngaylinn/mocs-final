@@ -1,3 +1,6 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
 from afpo import AgeFitnessPareto, activation2int
 from simulation import simulate
 
@@ -14,9 +17,9 @@ params = {
     'shape': 'square',
     'layers': [
         {'res': 1},
-        {'res': 2},
+        {'res': 2, 'base': True},
         {'res': 4},
-        {'res': 8, 'base': True}
+        {'res': 8}
     ],
     'use_growth': True,
     'activation': 'sigmoid'
@@ -70,7 +73,8 @@ phenotypes_2 = simulate(
     activation2int[afpo.activation])
 
 # Reverse the output...
-phenotypes_2 = phenotypes_2[::-1, :, :, :]
+phenotypes_2 = phenotypes_2[::-1, :, :, :, :]
+print('Shape: ', phenotypes_2.shape)
 
 fitness_scores_2 = afpo.evaluate_phenotypes(phenotypes_2)
 for i, idx in enumerate(unsimulated_indices):
@@ -79,11 +83,43 @@ for i, idx in enumerate(unsimulated_indices):
             afpo.population[idx].set_phenotype(phenotypes_2[i][-1][afpo.base_layer] > 0)
 
 
+
 ###### Evaluate phenotypic difference ######
 # (This evaluates the match between values of *all* grid cells at all timesteps) 
 n_different = 0
 for i in range(len(fitness_scores_2)):
     if not (phenotypes_2[i] == phenotypes_1[i]).all():
         n_different += 1
+        ###### Plot divergence of values #########
+        # phenotypes_1[i] phenotypes_2[i]
 
-print('num diff: ', n_different)
+        # divergence = [np.sum(phenotypes_1[i, t] - phenotypes_2[i,t]) for t in range(params['sim_steps'])]
+
+        # print(state_genotypes[i], state_genotypes_2[i])
+        # print(phenotypes_1[i,2,afpo.base_layer,::8, ::8])
+        # print(phenotypes_2[i,2,afpo.base_layer,::8, ::8])
+        # print(afpo.population[0].above_start)
+        # print(afpo.population[0].around_start)
+
+        # plt.plot(range(params['sim_steps']), divergence)
+        # plt.show()
+        # exit()
+    else:
+        print((fitness_scores_1[i], fitness_scores_2[i]))
+
+        if fitness_scores_2[i] != 2048 and fitness_scores_2[i] != 3072:
+              print(fitness_scores_2[i])
+              print(phenotypes_2[i,-1,afpo.base_layer,::8, ::8])
+              print(phenotypes_1[i,-1,afpo.base_layer,::8, ::8])
+            #   exit()
+
+
+
+print('num diff phenotype: ', n_different)
+
+n_different = 0
+for i in range(len(fitness_scores_2)):
+    if not (fitness_scores_1[i] == fitness_scores_2[i]):
+        n_different += 1
+        
+print('num diff fitness: ', n_different)
