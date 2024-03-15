@@ -60,7 +60,7 @@ ACTIVATION_RELU = 2
 @cuda.jit
 def activate_sigmoid(weighted_sum):
     """If the weighted sum is negative, """
-    if weighted_sum <= 0:
+    if weighted_sum <= 0.0:
         return 0
     return 1 / (1 + np.e ** (-weighted_sum))
 
@@ -74,11 +74,11 @@ def activate_relu(weighted_sum):
 
 
 @cuda.jit
-def look_down(layer, phenotypes, genotypes, growth, down_weights_start, pop_idx, step, row, col):
+def look_down(layer, phenotypes, genotypes, down_weights_start, pop_idx, step, row, col):
     """Compute the weighted sum of this cell's neighbors in the layer below."""
-    if layer == 0 and growth == 0:
+    if layer == 0:
         return 0
-
+    
     # The "granularity" of this layer. Layer0 == 1, layer1 == 2, layer2 == 4, layer3 == 8
     g = 1 << layer
 
@@ -86,8 +86,8 @@ def look_down(layer, phenotypes, genotypes, growth, down_weights_start, pop_idx,
     result = 0
     # Look at all the cells that occupy "the same position" as this cell but
     # one layer down.
-    for r in range((row // g)*g, (row // g)*g + g):
-        for c in range((col // g)*g, (col // g)*g + g):
+    for r in range((row // g)*g, (row // g)*g + g, g//2):
+        for c in range((col // g)*g, (col // g)*g + g, g//2):
             # Do wrap-around bounds checking. This may be inefficient, since
             # we're doing extra modulus operations and working on
             # non-contiguous memory may prevent coallesced reads. However, it's
@@ -100,6 +100,23 @@ def look_down(layer, phenotypes, genotypes, growth, down_weights_start, pop_idx,
             result += neighbor_state * weight
             weight_index += 1
     return result
+    # return 0.5
+
+
+@cuda.jit
+def look_up(num_layers, layer, phenotypes, genotypes, up_weights_start, pop_idx, step, row, col):
+    """Compute the weighted sum of this cell's neighbors in the layer above."""
+    if layer == num_layers - 1:
+        return 0
+    # layer_above = min(num_layers-1, layer+1)
+    # Look at just the single neighbor in the next layer up.
+    # g = 1 << layer
+    # r = (row // g)
+    # c = (col // g)
+    neighbor_state = phenotypes[pop_idx][step-1][layer+1][row][col]
+    weight = genotypes[pop_idx, layer][up_weights_start]
+    # return 0.5
+    return neighbor_state * weight
 
 
 @cuda.jit
@@ -128,77 +145,23 @@ def look_around(layer, phenotypes, genotypes, around_weights_start, pop_idx, ste
 
 
 @cuda.jit
-def look_up(num_layers, layer, phenotypes, genotypes, growth, up_weights_start, pop_idx, step, row, col):
-    """Compute the weighted sum of this cell's neighbors in the layer above."""
-    if layer == num_layers - 1 and growth == 0:
-        return 0
-    # Look at just the single neighbor in the next layer up.
-    neighbor_state = phenotypes[pop_idx][step-1][layer+1][row][col]
-    weight = genotypes[pop_idx, layer, up_weights_start]
-    return neighbor_state * weight
-
-@cuda.jit
-def get_spread_update(num_layers, layer, phenotypes, growth_genotypes, around_start, above_start, pop_idx, step, row, col):
-    up_spread_weighted_sum = look_up(num_layers, layer, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
-    up_spread_weighted_sum += look_around(layer, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
-    up_spread_weighted_sum += look_down(layer, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
-    
-    down_spread_weighted_sum = look_up(num_layers, layer, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
-    down_spread_weighted_sum += look_around(layer, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
-    down_spread_weighted_sum += look_down(layer, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
-    
-    left_spread_weighted_sum = look_up(num_layers, layer, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
-    left_spread_weighted_sum += look_around(layer, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
-    left_spread_weighted_sum += look_down(layer, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
-    
-    right_spread_weighted_sum = look_up(num_layers, layer, phenotypes, growth_genotypes, 1, above_start, pop_idx, step, row, col) 
-    right_spread_weighted_sum += look_around(layer, phenotypes, growth_genotypes, around_start, pop_idx, step, row, col) 
-    right_spread_weighted_sum += look_down(layer, phenotypes, growth_genotypes, 1, 0, pop_idx, step, row, col)
-
-    return (left_spread_weighted_sum > 0,
-        right_spread_weighted_sum > 0,
-        up_spread_weighted_sum > 0,
-        down_spread_weighted_sum > 0)
-
-
-@cuda.jit
-def update_cell(num_layers, layer, use_growth, phenotypes, growth_genotypes, state_genotypes, base_layer, around_start, above_start, pop_idx, step, row, col, activation):
+def update_cell(num_layers, layer, phenotypes, state_genotypes, around_start, above_start, pop_idx, step, row, col):
     """Compute the next state for a single cell in layer0 from prev states."""
 
     # Calculate the weighted sum of all neighbors.
-    down_signal_sum = look_down(layer, phenotypes, state_genotypes, 0, 0, pop_idx, step, row, col) # Should return 0 for L=0
+    down_signal_sum = look_down(layer, phenotypes, state_genotypes, 0, pop_idx, step, row, col) # Should return 0 for L=0
     around_signal_sum = look_around(layer, phenotypes, state_genotypes, around_start, pop_idx, step, row, col) 
-    up_signal_sum = look_up(num_layers, layer, phenotypes, state_genotypes, 0, above_start, pop_idx, step, row, col)
+    up_signal_sum = look_up(num_layers, layer, phenotypes, state_genotypes, above_start, pop_idx, step, row, col)
 
-    signal_sum = down_signal_sum + around_signal_sum + up_signal_sum
+    signal_sum = around_signal_sum + down_signal_sum + up_signal_sum #  + up_signal_sum
 
-    # Update cells to be alive if on L=0 (only if current cell is actually alive)
-    # alive = phenotypes[pop_idx][step][layer][row][col] != 0
-    # if layer == base_layer and alive and use_growth:
-    #     # Spread to nearby cells... is this necessary?
-    #     (left, right, up, down) = get_spread_update(num_layers, base_layer, phenotypes, growth_genotypes, around_start, above_start, pop_idx, step, row, col)
-                
-    #     if left:
-    #         phenotypes[pop_idx][step][layer][(row % WORLD_SIZE)][((col-1) % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
-    #     if right:
-    #         phenotypes[pop_idx][step][layer][(row % WORLD_SIZE)][((col+1) % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
-    #     if up:
-    #         phenotypes[pop_idx][step][layer][((row-1) % WORLD_SIZE)][(col % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
-    #     if down:
-    #         phenotypes[pop_idx][step][layer][((row+1) % WORLD_SIZE)][(col % WORLD_SIZE)] = phenotypes[pop_idx][step][layer][row][col]
-
-    # Actually update the phenotype state for step on layer1 at (row, col).
-    # if activation == ACTIVATION_SIGMOID:
     phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
-    # elif activation == ACTIVATION_TANH:
-    #     phenotypes[pop_idx][step][layer][row][col] = activate_tanh(signal_sum)
-    # elif activation == ACTIVATION_RELU:
-    #     phenotypes[pop_idx][step][layer][row][col] = activate_relu(signal_sum)
+
         
 
 # Max registers can be tuned per device. 64 is the most my laptop can handle.
 @cuda.jit(max_registers=64)
-def simulation_kernel(growth_genotypes, state_genotypes, phenotypes, num_layers, base_layer, around_start, above_start, use_growth, activation):
+def simulation_kernel(state_genotypes, phenotypes, num_layers, around_start, above_start):
     """Compute and record the full development process of a population."""
     # Compute indices for this thread.
     pop_idx = cuda.blockIdx.x
@@ -213,7 +176,7 @@ def simulation_kernel(growth_genotypes, state_genotypes, phenotypes, num_layers,
         for col in range(start_col, start_col + COLS_PER_THREAD):
             # Update the state in every layer this individual uses.
             for layer in range(0, num_layers):
-                update_cell(num_layers, layer, use_growth, phenotypes, growth_genotypes, state_genotypes, base_layer, around_start, above_start, pop_idx, step, row, col, activation)
+                update_cell(num_layers, layer, phenotypes, state_genotypes, around_start, above_start, pop_idx, step, row, col)
         # Make sure all threads have finished computing this step before going
         # on to the next one.
         cuda.syncthreads()
@@ -270,9 +233,8 @@ def simulate(growth_genotypes, state_genotypes, num_layers, base_layer, around_s
         pop_size, NUM_STEPS, num_layers, WORLD_SIZE, WORLD_SIZE)
 
     # Copy input data from host memory to device memory.
-    d_phenotypes = cuda.to_device(phenotypes)
-    d_growth_genotypes = cuda.to_device(growth_genotypes)
-    d_state_genotypes = cuda.to_device(state_genotypes)
+    d_phenotypes = cuda.to_device(phenotypes.astype(np.float32))
+    d_state_genotypes = cuda.to_device(state_genotypes.astype(np.float32))
 
     # Actually run the simulation for all individuals in parallel on the GPU.
     simulation_kernel[
@@ -283,7 +245,9 @@ def simulate(growth_genotypes, state_genotypes, num_layers, base_layer, around_s
         # the CA world to compute, and the Y dimension is multiplied by
         # COLS_PER_THREAD to find the first column to start from.
         (WORLD_SIZE, COL_BATCH_SIZE)
-    ](d_growth_genotypes, d_state_genotypes, d_phenotypes, num_layers, base_layer, around_start, above_start, use_growth, activation)
+    ](d_state_genotypes, d_phenotypes, num_layers, around_start, above_start)
+
+    # simulation_kernel(state_genotypes, phenotypes, num_layers, around_start, above_start)
 
     # Copy output data from device memory to host memory.
     phenotypes = d_phenotypes.copy_to_host()
