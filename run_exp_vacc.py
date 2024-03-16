@@ -14,7 +14,6 @@ from simulation import visualize
 parser = argparse.ArgumentParser()
 parser.add_argument('exp_file', type=str, help='Experiment file')
 parser.add_argument('name', type=str, help='Name of experiment')
-parser.add_argument('optimizer', default='afpo', type=str, help='Name of optimizer')
 args = parser.parse_args()
 
 # Read the experiment file into exp_arms variable
@@ -39,13 +38,14 @@ def main():
             os.system(f'mkdir ./experiments/{args.name}/{arm}')
 
         arm_parameters = exp_arms[arm]
+        optimizer = arm_parameters['optimizer']
 
         # Run a few instances of each
         n_trials = arm_parameters['num_trials']
         for trial in range(n_trials):
-            if args.optimizer == 'afpo':
+            if optimizer == 'afpo':
                 os.system(f'sbatch vacc_submit_arm.sh {args.exp_file} {args.name} {arm} {trial}')
-            elif args.optimizer == 'hillclimber':
+            elif optimizer == 'hillclimber':
                 os.system(f'sbatch vacc_submit_arm_hc.sh {args.exp_file} {args.name} {arm} {trial}')
 
 
