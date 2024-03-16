@@ -13,8 +13,6 @@ activation2int = {
     'relu': ACTIVATION_RELU
 }
 
-N_RANDOM_INDIVIDUALS = 10
-
 @functools.total_ordering # Sortable by fitness
 class Solution:
     def __init__(self, layers, id, parent_id=None):
@@ -30,16 +28,14 @@ class Solution:
         self.mutation_info = None
         self.randomize_genome()
 
-    def make_offspring(self, new_id, mutate_layers=None, state_or_growth=None):
+    def make_offspring(self, new_id, mutate_layers=None):
         child = Solution(layers=self.layers, id=new_id, parent_id=self.id)
         child.state_genotype = self.state_genotype # .copy()
-        child.growth_genotype = self.growth_genotype # .copy()
         if mutate_layers is None:
             child.mutate()
         else:
             assert [l in range(self.n_layers) for l in mutate_layers]
-            assert state_or_growth is not None
-            child.mutate_layers(mutate_layers, state_or_growth=state_or_growth)
+            child.mutate_layers(mutate_layers)
             
         return child
 
@@ -58,22 +54,16 @@ class Solution:
     def get_fitness(self):
         return self.fitness
     
-    def mutate_layers(self, layers, state_or_growth='state'):
+    def mutate_layers(self, layers):
         """
         Mutate a specific layer's genome by one weight
         """
-        if state_or_growth == 'state':
-            layer = np.random.choice(layers)
-            random_nonzero_indices = np.transpose(np.nonzero(self.state_genotype[layer]))
-            c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))][0]
-            self.state_genotype[layer, c] = np.random.random() * 2 - 1
-        else:
-            random_nonzero_indices = np.transpose(np.nonzero(self.growth_genotype))
-            r, c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))]
-            self.growth_genotype[r, c] = np.random.random() * 2 - 1
-
-        L = layer if state_or_growth == 'state' else r
-        below_range, around_range, above_range = self.get_layer_state_indices(L)
+        layer = np.random.choice(layers)
+        random_nonzero_indices = np.transpose(np.nonzero(self.state_genotype[layer]))
+        c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))][0]
+        self.state_genotype[layer, c] = np.random.random() * 2 - 1
+        
+        below_range, around_range, above_range = self.get_layer_state_indices(layer)
         if c in range(*below_range):
             kind = 'below'
         elif c in range(*around_range):
@@ -82,31 +72,23 @@ class Solution:
             kind = 'above'
         else:
             kind = None
-        self.mutation_info = {'type': state_or_growth, 'kind': kind, 'layer': layer, 'rc': (layer if state_or_growth == 'state' else r, c)}
+        self.mutation_info = {'kind': kind, 'layer': layer}
         
 
     def mutate(self):
-        mutate_growth_weight = np.random.choice([0, 1], p=[self.state_n_weights / self.total_weights, self.growth_n_weights / self.total_weights])
-
-        if mutate_growth_weight:
-            random_nonzero_indices = np.transpose(np.nonzero(self.growth_genotype))
-            r, c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))]
-            self.growth_genotype[r, c] = np.random.random() * 2 - 1
-            self.mutation_info = {'type': 'growth', 'layer': self.base_layer, 'kind': None}
+        random_nonzero_indices = np.transpose(np.nonzero(self.state_genotype))
+        layer, c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))]
+        self.state_genotype[layer, c] = np.random.random() * 2 - 1
+        below_range, around_range, above_range = self.get_layer_state_indices(layer)
+        if c in range(*below_range):
+            kind = 'below'
+        elif c in range(*around_range):
+            kind = 'around'
+        elif c in range(*above_range):
+            kind = 'above'
         else:
-            random_nonzero_indices = np.transpose(np.nonzero(self.state_genotype))
-            r, c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))]
-            self.state_genotype[r, c] = np.random.random() * 2 - 1
-            below_range, around_range, above_range = self.get_layer_state_indices(r)
-            if c in range(*below_range):
-                kind = 'below'
-            elif c in range(*around_range):
-                kind = 'around'
-            elif c in range(*above_range):
-                kind = 'above'
-            else:
-                kind = None
-            self.mutation_info = {'type': 'state', 'layer': r, 'kind': kind}
+            kind = None
+        self.mutation_info = {'layer': layer, 'kind': kind}
 
     def dominates(self, other):
         return all([self.age <= other.age, self.fitness <= other.fitness])
@@ -150,7 +132,6 @@ class Solution:
         """
         Structure of genome:
         - state_genotype: (n_layers, max_below + max_around + max_above)
-        - growth_genotype: (4, max_below + max_around + max_above)
         """
         max_below = max([self.get_layer_n_params(l)[0] for l in range(self.n_layers)])
         max_around = max([self.get_layer_n_params(l)[1] for l in range(self.n_layers)])
@@ -162,26 +143,13 @@ class Solution:
 
         total_param_space = int(max_above + max_around + max_below)
         self.state_genotype = np.random.random((self.n_layers, total_param_space)).astype(np.float32) * 2 - 1
-        self.growth_genotype = np.random.random((4, total_param_space)).astype(np.float32) * 2 - 1
-
-        # Mask growth genome
-        if self.base_layer == 0: # Mask away below if base layer is layer 0
-            self.growth_genotype[:, 0:self.around_start] = 0
-        if self.base_layer == (self.n_layers - 1):
-            self.growth_genotype[:, self.above_start:] = 0
 
         # Mask state genome
         self.state_genotype[0, 0:self.around_start] = 0
         self.state_genotype[self.n_layers-1, self.above_start:] = 0
 
         self.state_n_weights = np.count_nonzero(self.state_genotype)
-        self.growth_n_weights = np.count_nonzero(self.growth_genotype)
-        self.total_weights = self.state_n_weights + self.growth_n_weights
-
-
-    def randomize_growth_genome(self):
-        size = self.get_layer_n_params(self.base_layer)
-        self.growth_genotype = np.random.random((size, 4)).astype(np.float32) * 2 - 1 # 4 for up,down,left,right spread
+        self.total_weights = self.state_n_weights
 
     def randomize_state_genome(self):
         self.state_genotype = np.random.random((self.n_layers, max([self.get_layer_n_params(l) for l in range(self.n_layers)]))).astype(np.float32) * 2 - 1
@@ -201,10 +169,10 @@ class AgeFitnessPareto:
         self.max_generations = experiment_constants['max_generations']
         self.target_population_size = experiment_constants['target_population_size']
         self.layers = experiment_constants['layers']
-        self.use_growth = experiment_constants['use_growth']
         self.activation = experiment_constants['activation']
         self.shape = experiment_constants['shape']
         self.neighbor_map_type = experiment_constants['neighbor_map_type'] # 'spatial' or 'random'
+        self.n_random_individuals = experiment_constants['n_random_individuals_per_generation']
 
         self.n_layers = len(self.layers)
         self.base_layer = next((i for i, d in enumerate(self.layers) if d.get('base', False)), None)
@@ -219,6 +187,8 @@ class AgeFitnessPareto:
         self.above_map = self.initialize_above_map()
 
     def evolve(self):
+        print(self.above_map)
+        print(self.below_map)
         self.initialize_population()
         while self.current_generation <= self.max_generations:
             print(f'Generation {self.current_generation}')
@@ -231,19 +201,16 @@ class AgeFitnessPareto:
         # Actually run the simulations, and time how long it takes.
         start = time.perf_counter()
 
-        unsimulated_growth_genotypes, unsimulated_state_genotypes, unsimulated_indices = self.get_unsimulated_genotypes()
-        init_phenotypes = self.make_seed_phenotypes(unsimulated_growth_genotypes.shape[0])
+        unsimulated_state_genotypes, unsimulated_indices = self.get_unsimulated_genotypes()
+        init_phenotypes = self.make_seed_phenotypes(unsimulated_state_genotypes.shape[0])
 
         ##### SIMULATE ON GPUs #####
-        print(f'Starting {self.target_population_size} simulations...')
+        print(f'Starting {unsimulated_state_genotypes.shape[0]} simulations...')
         phenotypes = simulate(
-            unsimulated_growth_genotypes, 
             unsimulated_state_genotypes, 
             self.n_layers, 
-            self.base_layer,  
             self.population[0].around_start, 
             self.population[0].above_start, 
-            self.use_growth, 
             init_phenotypes, 
             activation2int[self.activation],
             self.below_map,
@@ -304,8 +271,8 @@ class AgeFitnessPareto:
 
         self.population += new_individuals
 
-        # Add N_RANDOM_INDIVIDUALS new random individuals
-        self.population += [Solution(layers=self.layers, id=self.get_available_id()) for _ in range(N_RANDOM_INDIVIDUALS)]
+        # Add N random new individuals
+        self.population += [Solution(layers=self.layers, id=self.get_available_id()) for _ in range(self.n_random_individuals + 1)]
 
 
     def reduce_population(self):
@@ -329,9 +296,6 @@ class AgeFitnessPareto:
 
     def get_unsimulated_genotypes(self):
         # Filter out just the genotypes that haven't been simulated yet.
-        unsimulated_growth_genotypes = [
-            sol.growth_genotype for sol in self.population if not sol.been_simulated
-        ]
         unsimulated_state_genotypes = [
             sol.state_genotype for sol in self.population if not sol.been_simulated
         ]
@@ -339,7 +303,7 @@ class AgeFitnessPareto:
             i for i, sol in enumerate(self.population) if not sol.been_simulated
         ]
         # Aggregate the genotypes into a single matrix for simulation
-        return np.array(unsimulated_growth_genotypes, dtype=np.float32), np.array(unsimulated_state_genotypes, dtype=np.float32), unsimulated_indices
+        return np.array(unsimulated_state_genotypes, dtype=np.float32), unsimulated_indices
 
     def get_target_shape(self):
         """
@@ -416,10 +380,11 @@ class AgeFitnessPareto:
         below_map = np.zeros((self.n_layers, 4, 3)).astype(int)
         if self.neighbor_map_type == 'random':
             for l in range(self.n_layers):
-                rand_l = np.random.randint(self.n_layers)
-                rand_r_offset = np.random.randint(WORLD_SIZE)
-                rand_c_offset = np.random.randint(WORLD_SIZE)
-                below_map[l, 0] = [rand_l, rand_r_offset, rand_c_offset]
+                for i in range(4):
+                    rand_l = np.random.randint(self.n_layers)
+                    rand_r_offset = np.random.randint(WORLD_SIZE)
+                    rand_c_offset = np.random.randint(WORLD_SIZE)
+                    below_map[l, i] = [rand_l, rand_r_offset, rand_c_offset]
         else:
             for l in range(self.n_layers):
                 below_map[l, 0] = [l-1, 0, 0]
