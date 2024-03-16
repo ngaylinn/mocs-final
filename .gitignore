@@ -7,3 +7,5 @@ experiments
 experiments/*
 vacc_out_files
 vacc_out_files/*
+experiments_before_Mar15
+bad_experiments
