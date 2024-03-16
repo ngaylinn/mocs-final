@@ -123,12 +123,14 @@ def look_up(num_layers, layer, phenotypes, genotypes, up_weights_start, pop_idx,
     """Compute the weighted sum of this cell's neighbors in the layer above."""
     if layer == num_layers - 1:
         return 0
-    # layer_above = min(num_layers-1, layer+1)
     # Look at just the single neighbor in the next layer up.
-    # g = 1 << layer
-    # r = (row // g)
-    # c = (col // g)
-    neighbor_state = phenotypes[pop_idx][step-1][layer+1][row][col]
+    g = 1 << layer
+    new_layer = above_map[layer][0]
+    new_layer_g = 1 << new_layer
+    new_row = ((((row // g)*g) + ((above_map[layer][1] // new_layer_g)*new_layer_g)) % WORLD_SIZE) # // new_layer_g
+    new_col = ((((col // g)*g) + ((above_map[layer][2] // new_layer_g)*new_layer_g)) % WORLD_SIZE) # // new_layer_g
+        
+    neighbor_state = phenotypes[pop_idx][step-1][layer+1][new_row][new_col]
     weight = genotypes[pop_idx, layer][up_weights_start]
     # return 0.5
     return neighbor_state * weight
@@ -222,11 +224,11 @@ def check_granularity(g, image):
     # return np.array_equal(image, scaled_up)
 
 
-def simulate(growth_genotypes, state_genotypes, num_layers, base_layer, around_start, above_start, use_growth, phenotypes, activation, below_map, above_map):
+def simulate(state_genotypes, num_layers, around_start, above_start, phenotypes, activation, below_map, above_map):
     """Simulate genotypes and return phenotype videos."""
 
     # Infer population size from genotypes
-    pop_size = growth_genotypes.shape[0]
+    pop_size = state_genotypes.shape[0]
 
     # Each individual has a genotype that consists of an activation function
     # and a set of neighbor weights for each layer in the hierarchical CA.
@@ -244,7 +246,6 @@ def simulate(growth_genotypes, state_genotypes, num_layers, base_layer, around_s
     assert type(num_layers) is int
     assert num_layers in range(1, NUM_LAYERS + 1)
 
-    assert type(use_growth) is bool
     assert type(activation) is int
 
     assert phenotypes.shape == (
