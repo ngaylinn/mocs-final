@@ -10,21 +10,20 @@ from afpo import Solution, activation2int
 from simulation import simulate, make_seed_phenotypes, DEAD, ALIVE
 
 
-def simulate_one_individual(solution : Solution):
-    init_phenotypes = make_seed_phenotypes(1)
+def simulate_one_individual(solution : Solution, afpo):
+    init_phenotypes = make_seed_phenotypes(1, n_layers=solution.n_layers)
     print(solution.n_layers)
 
     phenotypes = simulate(
-            np.array([solution.growth_genotype]), 
             np.array([solution.state_genotype]), 
-            solution.n_layers, 
-            solution.base_layer,  
+            solution.n_layers,   
             solution.around_start, 
-            solution.above_start, 
-            True, 
+            solution.above_start,  
             init_phenotypes, 
-            0) # sigmoid default currently 
-    
+            0,
+            afpo.below_map,
+            afpo.above_map) # sigmoid default currently 
+    print(phenotypes.shape)
     return phenotypes[0]
 
 def visualize_all_layers(phenotype, filename):
@@ -138,6 +137,8 @@ if __name__ == '__main__':
 
     print(exp.shape)
     print(exp.get_target_shape())
-
-    # exp_best_phenotype = simulate_one_individual(exp.best_solution())
-    # visualize_all_layers(exp_best_phenotype, 'control_best_all_layers_1.gif')
+    
+    best = exp.best_solution()
+    exp_best_phenotype = simulate_one_individual(best, exp)
+    print(best.fitness, exp.n_layers, best.n_layers)
+    visualize_all_layers(exp_best_phenotype, 'square_4l.gif')
