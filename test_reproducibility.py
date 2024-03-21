@@ -43,7 +43,6 @@ phenotypes_1 = simulate(
     afpo.population[0].around_start, 
     afpo.population[0].above_start,  
     init_phenotypes, 
-    activation2int[afpo.activation],
     afpo.below_map,
     afpo.above_map)
 
@@ -65,7 +64,6 @@ phenotypes_2 = simulate(
     afpo.population[0].around_start, 
     afpo.population[0].above_start,  
     init_phenotypes, 
-    activation2int[afpo.activation],
     afpo.below_map, 
     afpo.above_map)
 
@@ -80,8 +78,22 @@ for i, idx in enumerate(unsimulated_indices):
             afpo.population[idx].set_phenotype(phenotypes_2[i][-1][afpo.base_layer] > 0)
 
 
+phenotypes_3 = simulate(
+    np.array([state_genotypes_2[0]]), 
+    afpo.n_layers,   
+    afpo.population[0].around_start, 
+    afpo.population[0].above_start,  
+    np.array([init_phenotypes[0]]), 
+    afpo.below_map, 
+    afpo.above_map)
+
 
 ###### Evaluate phenotypic difference ######
+
+print(phenotypes_2.shape, phenotypes_3.shape)
+if not (phenotypes_3[0] == phenotypes_2[0]).all():
+    print('Single different than multiple')
+
 # (This evaluates the match between values of *all* grid cells at all timesteps) 
 n_different = 0
 sum_diff = 0
@@ -98,5 +110,5 @@ print('num diff: ', n_different)
 # print('avg diff: ', sum_diff / n_different)
 print('max diff: ', max_diff)
 
-print(afpo.above_map)
-print(afpo.below_map)
+# print(afpo.above_map)
+# print(afpo.below_map)

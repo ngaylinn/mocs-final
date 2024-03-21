@@ -224,7 +224,7 @@ def check_granularity(g, image):
     # return np.array_equal(image, scaled_up)
 
 
-def simulate(state_genotypes, num_layers, around_start, above_start, phenotypes, activation, below_map, above_map):
+def simulate(state_genotypes, num_layers, around_start, above_start, phenotypes, below_map, above_map):
     """Simulate genotypes and return phenotype videos."""
 
     # Infer population size from genotypes
@@ -245,8 +245,6 @@ def simulate(state_genotypes, num_layers, around_start, above_start, phenotypes,
     # out of the computation together.
     assert type(num_layers) is int
     assert num_layers in range(1, NUM_LAYERS + 1)
-
-    assert type(activation) is int
 
     assert phenotypes.shape == (
         pop_size, NUM_STEPS, num_layers, WORLD_SIZE, WORLD_SIZE)
