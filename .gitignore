@@ -7,5 +7,9 @@ experiments
 experiments/*
 vacc_out_files
 vacc_out_files/*
+<<<<<<< HEAD
 experiments_before_Mar15
 bad_experiments
+=======
+experiments_before_Mar15
+>>>>>>> 65cd52f (ignore new exp directory)
