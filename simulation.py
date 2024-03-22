@@ -130,7 +130,7 @@ def look_up(num_layers, layer, phenotypes, genotypes, up_weights_start, pop_idx,
     new_row = ((((row // g)*g) + ((above_map[layer][1] // new_layer_g)*new_layer_g)) % WORLD_SIZE) # // new_layer_g
     new_col = ((((col // g)*g) + ((above_map[layer][2] // new_layer_g)*new_layer_g)) % WORLD_SIZE) # // new_layer_g
         
-    neighbor_state = phenotypes[pop_idx][step-1][layer+1][new_row][new_col]
+    neighbor_state = phenotypes[pop_idx][step-1][new_layer][new_row][new_col]
     weight = genotypes[pop_idx, layer][up_weights_start]
     # return 0.5
     return neighbor_state * weight
