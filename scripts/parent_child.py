@@ -7,20 +7,39 @@ from simulation import simulate, make_seed_phenotypes
 from afpo import AgeFitnessPareto, activation2int, Solution
 
 # Parse command line arguments
-parser = argparse.ArgumentParser()
-parser.add_argument('params_file', type=str, help='Parameters file')
-args = parser.parse_args()
+# parser = argparse.ArgumentParser()
+# parser.add_argument('params_file', type=str, help='Parameters file')
+# args = parser.parse_args()
 
-# Read the experiment file into exp_arms variable
-params_file = open(args.params_file)
-params_string = params_file.read()
-params = eval(params_string)
-params_file.close()
+# # Read the experiment file into exp_arms variable
+# params_file = open(args.params_file)
+# params_string = params_file.read()
+# params = eval(params_string)
+# params_file.close()
+
+params = {
+    'optimizer': 'afpo',
+    'num_trials': 20,
+    'target_population_size': 500,
+    'max_generations': 2000,
+    'n_random_individuals_per_generation': 100,
+    'mutate_layers': None,
+    'neighbor_map_type': 'spatial',
+    'sim_steps': 100,
+    'shape': 'square',
+    'layers': [
+        {'res': 1, 'base': True},
+        {'res': 2},
+        {'res': 4},
+        {'res': 8}
+    ],
+    'activation': 'sigmoid'
+  }
 
 base_layer = next((i for i, d in enumerate(params['layers']) if d.get('base', False)), None)
 n_layers = len(params['layers'])
 
-N_TOTAL = 1000000
+N_TOTAL = 1000
 BATCH_SIZE = 500
 N_BATCHES = N_TOTAL // BATCH_SIZE
 
@@ -34,42 +53,38 @@ for batch_idx in range(N_BATCHES):
     afpo = AgeFitnessPareto(params)
 
     # Make parents
-    parent_population = [Solution(layers=params['layers']) for _ in range(BATCH_SIZE)]
-    parent_unsimulated_growth_genotypes = np.array([sol.growth_genotype for sol in parent_population])
+    parent_population = [Solution(layers=params['layers'], id=afpo.get_available_id()) for _ in range(BATCH_SIZE)]
     parent_unsimulated_state_genotypes = np.array([sol.state_genotype for sol in parent_population])
     seed_phenotypes = afpo.make_seed_phenotypes(BATCH_SIZE)
 
     # Simulate parents
     phenotypes = simulate(
-        parent_unsimulated_growth_genotypes, 
         parent_unsimulated_state_genotypes, 
         n_layers, 
-        base_layer,  
         parent_population[0].around_start, 
         parent_population[0].above_start, 
-        params['use_growth'], 
         seed_phenotypes, 
-        activation2int[params['activation']])
+        activation2int[params['activation']],
+        afpo.below_map,
+        afpo.above_map)
     
     parents_binarized_phenotypes = (phenotypes[:, -1, afpo.base_layer] > 0)
     parents_fitness = afpo.evaluate_phenotypes(phenotypes)
 
     # Mutate and get BATCH_SIZE children
-    children_population = [solution.make_offspring() for solution in parent_population]
-    children_unsimulated_growth_genotypes = np.array([sol.growth_genotype for sol in children_population])
+    children_population = [solution.make_offspring(new_id=afpo.get_available_id()) for solution in parent_population]
     children_unsimulated_state_genotypes = np.array([sol.state_genotype for sol in children_population])
 
     # Simulate children 
-    phenotypes = simulate(
-        children_unsimulated_growth_genotypes, 
+    phenotypes =  simulate(
         children_unsimulated_state_genotypes, 
         n_layers, 
-        base_layer,  
-        children_population[0].around_start, 
-        children_population[0].above_start, 
-        params['use_growth'], 
+        parent_population[0].around_start, 
+        parent_population[0].above_start, 
         seed_phenotypes, 
-        activation2int[params['activation']])
+        activation2int[params['activation']],
+        afpo.below_map,
+        afpo.above_map)
     
     children_binarized_phenotypes = (phenotypes[:, -1, afpo.base_layer] > 0)
     children_fitness = afpo.evaluate_phenotypes(phenotypes)

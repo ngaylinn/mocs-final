@@ -77,38 +77,54 @@ for i, idx in enumerate(unsimulated_indices):
             afpo.population[idx].set_simulated(True)
             afpo.population[idx].set_phenotype(phenotypes_2[i][-1][afpo.base_layer] > 0)
 
-
+####### SIMULATE SINGLE GENOTYPE #######
+i = 12
+init_phenotypes = afpo.make_seed_phenotypes(10)
+state_genotypes_3 = state_genotypes.copy()
+state_genotypes_3 = state_genotypes_3[:10]
 phenotypes_3 = simulate(
-    np.array([state_genotypes_2[0]]), 
+    state_genotypes_3,
     afpo.n_layers,   
     afpo.population[0].around_start, 
     afpo.population[0].above_start,  
-    np.array([init_phenotypes[0]]), 
+    init_phenotypes, 
     afpo.below_map, 
     afpo.above_map)
 
 
 ###### Evaluate phenotypic difference ######
 
-print(phenotypes_2.shape, phenotypes_3.shape)
-if not (phenotypes_3[0] == phenotypes_2[0]).all():
-    print('Single different than multiple')
+# assert (state_genotypes_3[0] == state_genotypes[12]).all()
+# print(state_genotypes.shape)
+# print(phenotypes_1.shape, phenotypes_3.shape)
+# if not (phenotypes_3[0] == phenotypes_1[i]).all():
+#     print('Single different than multiple')
+
+# Diff
+diff = [np.sum(phenotypes_3[0, t] - phenotypes_2[i, t]) for t in range(NUM_STEPS)]
+for i, d in enumerate(diff):
+    print(i, d)
 
 # (This evaluates the match between values of *all* grid cells at all timesteps) 
-n_different = 0
-sum_diff = 0
-max_diff = 0
-for i in range(len(fitness_scores_2)):
-    if not (phenotypes_2[i] == phenotypes_1[i]).all():
-        n_different += 1
-        diff = np.abs(phenotypes_2[i] - phenotypes_1[i])
-        sum_diff += np.sum(diff)
-        if np.max(diff) > max_diff:
-            max_diff = np.max(diff)
+def different(phenotypes_1, phenotypes_2):
+    n_different = 0
+    sum_diff = 0
+    max_diff = 0
+    for i in range(len(phenotypes_2)):
+        if not (phenotypes_2[i] == phenotypes_1[i]).all():
+            n_different += 1
+            diff = np.abs(phenotypes_2[i] - phenotypes_1[i])
+            sum_diff += np.sum(diff)
+            if np.max(diff) > max_diff:
+                max_diff = np.max(diff)
 
-print('num diff: ', n_different)
-# print('avg diff: ', sum_diff / n_different)
-print('max diff: ', max_diff)
+    print('num diff: ', n_different)
+    print('max diff: ', max_diff)
 
+print(len(phenotypes_3), len(phenotypes_1))
+different(phenotypes_1, phenotypes_2)
+different(phenotypes_2, phenotypes_3)
+different(phenotypes_1, phenotypes_3)
+different(state_genotypes[:10], state_genotypes_3[:10])
 # print(afpo.above_map)
 # print(afpo.below_map)
