@@ -7,7 +7,7 @@ import numpy as np
 
 from afpo import Solution, WORLD_SIZE, NUM_STEPS, NUM_LAYERS, DEAD, ALIVE, ACTIVATION_SIGMOID, ACTIVATION_RELU, ACTIVATION_TANH
 from simulation import simulate, get_layer_mask, DEAD, ALIVE, WORLD_SIZE, NUM_STEPS, NUM_LAYERS, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS, ACTIVATION_SIGMOID, ACTIVATION_RELU, ACTIVATION_TANH
-from util import create_hollow_circle, create_square, create_diamond
+from util import create_hollow_circle, create_square, create_diamond, create_plus
 
 activation2int = {
     'sigmoid': ACTIVATION_SIGMOID,
@@ -186,6 +186,8 @@ class HillClimber:
             target = create_diamond(target_size)
         elif self.shape == 'circle':
             target = create_hollow_circle(target_size)
+        elif self.shape == 'plus':
+            target = create_plus(target_size)
 
         # Upsize back to 64x64 because that's how we're comparing 
         while target.shape[0] < 64: 

@@ -65,3 +65,14 @@ def create_square(N):
     array[(N // 4):(N//4 * 3), (N // 4):(N//4 * 3)] = 1
 
     return array
+
+def create_plus(N):
+    # array = np.full((N, N), 0)
+    array = np.full((8,8), 0)
+    array[3:5, 1:7] = 1
+    array[1:7, 3:5] = 1
+    array = np.repeat(np.repeat(array, 2, axis=0), 2, axis=1)
+    # else:
+    #     array[N // ifths *2: N // ifths * 3, N // ifths: N//ifths*4] = 1
+    #     array[N // ifths: N // ifths * 4, N // ifths*2: N//ifths*3] = 1
+    return array
