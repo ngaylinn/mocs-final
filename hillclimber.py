@@ -55,20 +55,19 @@ class HillClimber:
         # Actually run the simulations, and time how long it takes.
         start = time.perf_counter()
 
-        unsimulated_state_genotypes, unsimulated_ids = self.get_unsimulated_genotypes()
-        init_phenotypes = self.make_seed_phenotypes(unsimulated_state_genotypes.shape[0])
+        unsimulated_children_genotypes = self.get_children_genotypes()
+        init_phenotypes = self.make_seed_phenotypes(unsimulated_children_genotypes.shape[0])
 
         rand_id = list(self.children_population.keys())[0]
 
         ##### SIMULATE ON GPUs #####
         print(f'Starting {self.target_population_size} simulations...')
         phenotypes = simulate(
-            unsimulated_state_genotypes, 
+            unsimulated_children_genotypes, 
             self.n_layers, 
             self.children_population[rand_id].around_start, 
             self.children_population[rand_id].above_start, 
             init_phenotypes, 
-            activation2int[self.activation],
             self.below_map,
             self.above_map)
 
@@ -80,7 +79,7 @@ class HillClimber:
         parent_child_distances = []
         parent_child_fitnesses = []
         # Set the fitness and simulated flag for each of the just-evaluated solutions
-        for i, id in enumerate(unsimulated_ids):
+        for i, id in enumerate(self.children_population):
             self.children_population[id].set_fitness(fitness_scores[i])
             self.children_population[id].set_simulated(True)
             self.children_population[id].set_phenotype(phenotypes[i][-1][self.base_layer] > 0) # phenotype is now binarized last step of base layer
@@ -91,29 +90,23 @@ class HillClimber:
                 parent_child_fitnesses.append((parent.fitness, self.children_population[id].fitness))
                 parent_child_distances.append(self.children_population[id].get_distance_from_parent(parent))
 
-        # if self.children_population[rand_id].parent_id is not None:
-        #     print(self.children_population[rand_id].mutation_info)
-        #     print(self.children_population[rand_id].state_genotype)
-        #     print(self.parent_population[self.children_population[rand_id].parent_id].state_genotype)
-        #     print(Counter([solution.mutation_info['layer'] for i, solution in self.children_population.items()]))
-
         # Reduce the population by selecting parent or child to remove
         n_neutral_children = self.select()
         # Extend the population using tournament selection
         mutation_data = self.mutate_population()
 
         mean_fitness = np.mean([sol.fitness for id, sol in self.parent_population.items()])
-        print('Average fitness:', mean_fitness)
-        print('Min fitness: ', min([sol.fitness for id, sol in self.parent_population.items()]))
-        print('Average age:', np.mean([sol.age for id, sol in self.parent_population.items()]))
-        print('Proportion neutral: ', n_neutral_children / self.target_population_size)
-
         self.parent_child_fitness_history.append(parent_child_fitnesses)
         self.n_neutral_over_generations.append(n_neutral_children)
         self.best_fitness_history.append(self.best_solution())
         self.mean_fitness_history.append(np.mean([sol.fitness for id, sol in self.parent_population.items()]))
         self.parent_child_distance_history.append(parent_child_distances)
         self.mutation_data_over_generations.append(mutation_data)
+
+        print('Average fitness:', mean_fitness)
+        print('Min fitness: ', min([sol.fitness for id, sol in self.parent_population.items()]))
+        print('Average age:', np.mean([sol.age for id, sol in self.parent_population.items()]))
+        print('Proportion neutral: ', n_neutral_children / self.target_population_size)
 
     def initialize_population(self):
         # Initialize target_population_size random solutions
@@ -160,8 +153,9 @@ class HillClimber:
         self.children_population = {}
         # Make a new child from every parent
         for id, solution in self.parent_population.items():
-            child = solution.make_offspring(id, mutate_layers=self.mutate_layers)
-            self.children_population[id] = child
+            new_id = self.get_available_id()
+            child = solution.make_offspring(new_id=new_id, mutate_layers=self.mutate_layers)
+            self.children_population[new_id] = child
 
         aggregate_mutation_data = {
             'layer': list([solution.mutation_info['layer'] for i, solution in self.children_population.items()]),
@@ -170,15 +164,10 @@ class HillClimber:
         return aggregate_mutation_data
 
 
-    def get_unsimulated_genotypes(self):
-        unsimulated_state_genotypes = [
-            sol.state_genotype for _, sol in self.children_population.items() if not sol.been_simulated
-        ]
-        unsimulated_ids = [
-            id for id, sol in self.children_population.items() if not sol.been_simulated
-        ]
+    def get_children_genotypes(self):
+        children_genotypes = [sol.state_genotype for _, sol in self.children_population.items()]
         # Aggregate the genotypes into a single matrix for simulation
-        return np.array(unsimulated_state_genotypes, dtype=np.float32), unsimulated_ids
+        return np.array(children_genotypes, dtype=np.float32)
 
     def get_target_shape(self):
         """
@@ -293,4 +282,4 @@ class HillClimber:
         return self.num_ids
 
     def best_solution(self):
-        return min([sol for id, sol in self.parent_population.items() if sol.fitness is not None])
+        return min([sol for id, sol in self.parent_population.items()])
