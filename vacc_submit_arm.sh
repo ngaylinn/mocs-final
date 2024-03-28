@@ -6,7 +6,7 @@
 #SBATCH --gpus=1
 #SBATCH --job-name=mocs_exp_%j
 #SBATCH --output=./vacc_out_files/%x_%j.out
-#SBATCH --time=8:00:00
+#SBATCH --time=9:00:00
 
 set -x
 
