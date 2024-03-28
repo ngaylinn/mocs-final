@@ -1,6 +1,7 @@
 import functools
 import time
 import pickle
+from collections import Counter
 
 import numpy as np
 
@@ -30,7 +31,7 @@ class Solution:
 
     def make_offspring(self, new_id, mutate_layers=None):
         child = Solution(layers=self.layers, id=new_id, parent_id=self.id)
-        child.state_genotype = self.state_genotype # .copy()
+        child.state_genotype = self.state_genotype.copy()
         if mutate_layers is None:
             child.mutate()
         else:
@@ -181,14 +182,15 @@ class AgeFitnessPareto:
         self.num_ids = 0
 
         self.best_fitness_history = []
+        self.mean_fitness_history = []
         self.parent_child_distance_history = []
+        self.mutation_data_history = []
+        self.n_neutral_over_generations = []
 
         self.below_map = self.initialize_below_map()
         self.above_map = self.initialize_above_map()
 
     def evolve(self):
-        print(self.above_map)
-        print(self.below_map)
         self.initialize_population()
         while self.current_generation <= self.max_generations:
             print(f'Generation {self.current_generation}')
@@ -212,7 +214,6 @@ class AgeFitnessPareto:
             self.population[0].around_start, 
             self.population[0].above_start, 
             init_phenotypes, 
-            activation2int[self.activation],
             self.below_map,
             self.above_map)
 
@@ -220,9 +221,12 @@ class AgeFitnessPareto:
         lps = self.target_population_size / elapsed
         print(f'Finished in {elapsed:0.2f} seconds ({lps:0.2f} lifetimes per second).')
 
+        # Evaluate each phenotype's fitness
         fitness_scores = self.evaluate_phenotypes(phenotypes)
+
         parent_child_distances = []
-        # Set the fitness and simulated flag for each of the just-evaluated solutions
+        n_neutral = 0
+        # Set the fitness and simulated flag for each of the solutions just evaluated 
         for i, idx in enumerate(unsimulated_indices):
             self.population[idx].set_fitness(fitness_scores[i])
             self.population[idx].set_simulated(True)
@@ -230,24 +234,29 @@ class AgeFitnessPareto:
             # Get actual parent Solution object from population using parent_id
             parent = next((sol for sol in self.population if sol.id == self.population[idx].parent_id), None)
             if parent is not None:
+                if ((phenotypes[i][-1][self.base_layer] > 0) == (parent.phenotype)).all():
+                    n_neutral += 1
                 parent_child_distances.append(self.population[idx].get_distance_from_parent(parent))
 
-        print('Average fitness:',
-              np.mean([sol.fitness for sol in self.population]),
-              ', Min fitness: ',
-              min([sol.fitness for sol in self.population]))
-        print('Average age:',
-              np.mean([sol.age for sol in self.population]))
+        mean_fitness = np.mean([sol.fitness for sol in self.population])
+        print('Average fitness:', mean_fitness)
+        print('Min fitness: ', min([sol.fitness for sol in self.population]))
+        print('Average age:', np.mean([sol.age for sol in self.population]))
+        print('Proportion neutral: ', n_neutral / self.target_population_size)
         # Reduce the population
         self.reduce_population()
         # Increment ages by 1
         for sol in self.population:
             sol.increment_age()
         # Extend the population using tournament selection
-        self.extend_population()
+        aggregate_mutation_data = self.extend_population()
 
         self.best_fitness_history.append(self.best_solution())
+        self.mean_fitness_history.append(mean_fitness)
         self.parent_child_distance_history.append(parent_child_distances)
+        self.mutation_data_history.append(aggregate_mutation_data)
+        self.n_neutral_over_generations.append(n_neutral)
+
 
     def initialize_population(self):
         # Initialize target_population_size random solutions
@@ -257,22 +266,30 @@ class AgeFitnessPareto:
 
     def generate_new_individuals(self):
         new_individuals = []
+        mutation_data = []
         # 1 - Breed: do tournament selection
-        # The minus one is to make room for one random individual at the end.
-        for _ in range(self.target_population_size - 1):
+        for _ in range(self.target_population_size):
             # Randomly select an individual using tournament selection
             parent = self.tournament_select()
-            new_individuals.append(parent.make_offspring(self.get_available_id()))
+            child = parent.make_offspring(self.get_available_id())
+            mutation_data.append(child.mutation_info)
+            new_individuals.append(child)
 
-        return new_individuals
+        return new_individuals, mutation_data
 
     def extend_population(self):
-        new_individuals = self.generate_new_individuals()
+        new_individuals, mutation_data = self.generate_new_individuals()
 
         self.population += new_individuals
 
         # Add N random new individuals
         self.population += [Solution(layers=self.layers, id=self.get_available_id()) for _ in range(self.n_random_individuals + 1)]
+        
+        aggregate_mutation_data = {
+            'layer': dict(Counter([mutation_info['layer'] for mutation_info in mutation_data])),
+            'kind': dict(Counter([mutation_info['kind'] for mutation_info in mutation_data])),
+        }
+        return aggregate_mutation_data
 
 
     def reduce_population(self):
