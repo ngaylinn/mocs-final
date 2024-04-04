@@ -26,7 +26,17 @@ class Solution:
         self.been_simulated = False
         self.fitness = None
         self.phenotype = None
+        self.full_phenotype = None
         self.mutation_info = None
+        self.full_signaling_distance = None
+        self.signaling_distance = None
+        self.phenotype_distance = None
+        self.neutral_counter = 0
+        self.fitness_history = []
+        self.phenotype_history = []
+        self.signaling_distance_history = []
+        self.phenotype_distance_history = []
+        self.neutral_genotype_history = []
         self.randomize_genome()
 
     def make_offspring(self, new_id, mutate_layers=None):
@@ -37,6 +47,10 @@ class Solution:
         else:
             assert [l in range(self.n_layers) for l in mutate_layers]
             child.mutate_layers(mutate_layers)
+        child.neutral_counter = self.neutral_counter
+        child.fitness_history = self.fitness_history
+        child.signaling_distance_history = self.signaling_distance_history
+        child.phenotype_history = self.phenotype_history
             
         return child
 
@@ -45,6 +59,9 @@ class Solution:
 
     def set_phenotype(self, phenotype):
         self.phenotype = phenotype
+
+    def set_full_phenotype(self, full_phenotype):
+        self.full_phenotype = full_phenotype
 
     def set_simulated(self, new_simulated):
         self.been_simulated = new_simulated

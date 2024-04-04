@@ -33,11 +33,12 @@ class HillClimber:
         self.num_ids = 0
 
         self.best_fitness_history = []
-        self.mean_fitness_history = []
+        self.fitness_history = []
         self.parent_child_fitness_history = []
         self.parent_child_distance_history = []
         self.n_neutral_over_generations = []
         self.mutation_data_over_generations = []
+        self.beneficial_mutations_over_generations = []
 
         self.below_map = self.initialize_below_map()
         self.above_map = self.initialize_above_map()
@@ -82,6 +83,7 @@ class HillClimber:
         for i, id in enumerate(self.children_population):
             self.children_population[id].set_fitness(fitness_scores[i])
             self.children_population[id].set_simulated(True)
+            # self.children_population[id].set_full_phenotype(phenotypes[i])
             self.children_population[id].set_phenotype(phenotypes[i][-1][self.base_layer] > 0) # phenotype is now binarized last step of base layer
             # Get actual parent Solution object from population using parent_id
             parent_id = self.children_population[id].parent_id
@@ -91,22 +93,26 @@ class HillClimber:
                 parent_child_distances.append(self.children_population[id].get_distance_from_parent(parent))
 
         # Reduce the population by selecting parent or child to remove
-        n_neutral_children = self.select()
+        n_neutral_children, beneficial_mutations = self.select()
         # Extend the population using tournament selection
         mutation_data = self.mutate_population()
 
         mean_fitness = np.mean([sol.fitness for id, sol in self.parent_population.items()])
         self.parent_child_fitness_history.append(parent_child_fitnesses)
         self.n_neutral_over_generations.append(n_neutral_children)
-        self.best_fitness_history.append(self.best_solution())
-        self.mean_fitness_history.append(np.mean([sol.fitness for id, sol in self.parent_population.items()]))
+        # self.best_fitness_history.append(self.best_solution())
+        self.fitness_history.append([sol.fitness for id, sol in self.parent_population.items()])
+        # self.mean_fitness_history.append(np.mean([sol.fitness for id, sol in self.parent_population.items()]))
         self.parent_child_distance_history.append(parent_child_distances)
         self.mutation_data_over_generations.append(mutation_data)
+        self.beneficial_mutations_over_generations.append(beneficial_mutations)
 
         print('Average fitness:', mean_fitness)
         print('Min fitness: ', min([sol.fitness for id, sol in self.parent_population.items()]))
         print('Average age:', np.mean([sol.age for id, sol in self.parent_population.items()]))
         print('Proportion neutral: ', n_neutral_children / self.target_population_size)
+        # print('Neutral path Counter: ', Counter(beneficial_mutations))
+        # print('Neutrals: ', Counter([child.neutral_counter for child_id, child in self.children_population.items()]))
 
     def initialize_population(self):
         # Initialize target_population_size random solutions
@@ -130,20 +136,38 @@ class HillClimber:
         Look through children, compare fitness with parents, keep the best of the two.
         """
         n_neutral_children = 0
+        beneficial_mutations = []
         for child_id, child in self.children_population.items():
             # Get actual parent Solution object from population using parent_id
             parent_id = child.parent_id
             parent = self.parent_population[parent_id] if parent_id is not None else None
             if parent is not None:
+                # child.signaling_distance = np.sum(np.abs(child.full_phenotype - parent.full_phenotype))
+                child.phenotype_distance = self.children_population[child_id].get_distance_from_parent(parent)
                 if child.fitness == parent.fitness:
                     n_neutral_children += 1
+                    child.neutral_counter += 1
+                    
+                if child.fitness < parent.fitness:
+                    beneficial_mutations.append(child.neutral_counter)
+                    child.neutral_counter = 0
+
                 if child.fitness <= parent.fitness:
                     del self.parent_population[parent_id]
                     self.parent_population[child_id] = child
+                else:
+                    # self.parent_population[parent_id].signaling_distance = 0
+                    self.parent_population[parent_id].phenotype_distance = 0
             else:
                 self.parent_population[child_id] = child
 
-        return n_neutral_children
+        for _, parent in self.parent_population.items():
+            parent.fitness_history.append(parent.fitness)
+            parent.phenotype_history.append(parent.phenotype)
+            # parent.signaling_distance_history.append(parent.signaling_distance)
+            parent.phenotype_distance_history.append(parent.phenotype_distance)
+
+        return n_neutral_children, beneficial_mutations
 
 
     def mutate_population(self):
