@@ -76,7 +76,8 @@ class HillClimber:
         lps = self.target_population_size / elapsed
         print(f'Finished in {elapsed:0.2f} seconds ({lps:0.2f} lifetimes per second).')
 
-        fitness_scores = self.evaluate_phenotypes(phenotypes)
+        fitness_scores, binarized_phenotypes = self.evaluate_phenotypes(phenotypes)
+
         parent_child_distances = []
         parent_child_fitnesses = []
         # Set the fitness and simulated flag for each of the just-evaluated solutions
@@ -84,7 +85,7 @@ class HillClimber:
             self.children_population[id].set_fitness(fitness_scores[i])
             self.children_population[id].set_simulated(True)
             # self.children_population[id].set_full_phenotype(phenotypes[i])
-            self.children_population[id].set_phenotype(phenotypes[i][-1][self.base_layer] > 0) # phenotype is now binarized last step of base layer
+            self.children_population[id].set_phenotype(binarized_phenotypes[i]) # phenotype is now binarized last step of base layer
             # Get actual parent Solution object from population using parent_id
             parent_id = self.children_population[id].parent_id
             parent = self.parent_population[parent_id] if parent_id is not None else None
@@ -115,10 +116,44 @@ class HillClimber:
         # print('Neutrals: ', Counter([child.neutral_counter for child_id, child in self.children_population.items()]))
 
     def initialize_population(self):
-        # Initialize target_population_size random solutions
-        for _ in range(self.target_population_size):
-            new_id = self.get_available_id()
-            self.children_population[new_id] = Solution(layers=self.layers, id=new_id)
+        # Make sure all solutions are "interesting"
+        # i.e. all solutions' phenotypes are NOT all zeros or all ones
+        while len(self.children_population) < self.target_population_size:
+            print('Initial population length: ', len(self.children_population))
+            print(Counter([sol.fitness for id, sol in self.children_population.items()]))
+
+            # Initialize target_population_size random solutions
+            preliminary_pop = {}
+            for _ in range(self.target_population_size):
+                new_id = self.get_available_id()
+                preliminary_pop[new_id] = Solution(layers=self.layers, id=new_id)
+
+            # simulate the preliminary population
+            unsimulated_genotypes = np.array([sol.state_genotype for id, sol in preliminary_pop.items()])
+            init_phenotypes = self.make_seed_phenotypes(unsimulated_genotypes.shape[0])
+            phenotypes = simulate(
+                unsimulated_genotypes, 
+                self.n_layers, 
+                preliminary_pop[list(preliminary_pop.keys())[0]].around_start, 
+                preliminary_pop[list(preliminary_pop.keys())[0]].above_start, 
+                init_phenotypes, 
+                self.below_map,
+                self.above_map)
+            
+            fitness_scores, phenotypes = self.evaluate_phenotypes(phenotypes)
+            print(Counter(fitness_scores))
+
+            for i, sol_id in enumerate(preliminary_pop):
+                if fitness_scores[i] != 999999:
+                    preliminary_pop[sol_id].set_fitness(fitness_scores[i])
+                    preliminary_pop[sol_id].set_simulated(True)
+                    preliminary_pop[sol_id].set_phenotype(phenotypes[i])
+                    self.children_population[sol_id] = preliminary_pop[sol_id]
+                    # Stop adding to initial population if we've reached target_population_size
+                    if len(self.children_population) > self.target_population_size:
+                        break
+
+
 
     def generate_new_individuals(self):
         new_individuals = []
@@ -233,14 +268,23 @@ class HillClimber:
         # Allocate space for results.
         fitness_scores = np.zeros(pop_size, dtype=np.uint32)
 
+        binarized_phenotypes = []
+
         # For each individual in the population...
         for i in range(pop_size):
             # Look at just the final state of the layer0 part of the phenotype.
             # Compare it to the target image, and sum up the deltas to get the
             # final fitness score (lower is better, 0 is a perfect score).
-            fitness_scores[i] = np.sum(np.abs(target - (phenotypes[i][-1][self.base_layer] > 0)))
+            binarized_phenotype = (phenotypes[i][-1][self.base_layer] > 0)
+            binarized_phenotypes.append(binarized_phenotype)
 
-        return fitness_scores
+            fitness_scores[i] = np.sum(np.abs(target - binarized_phenotype))
+            if binarized_phenotype.all(): # All ones
+                fitness_scores[i] = 999999
+            elif (binarized_phenotype == False).all(): 
+                fitness_scores[i] = 999999
+
+        return fitness_scores, np.array(binarized_phenotypes)
 
 
     # @functools.cache
@@ -255,14 +299,11 @@ class HillClimber:
         phenotypes = np.full(
             (n, NUM_STEPS, self.n_layers, WORLD_SIZE, WORLD_SIZE),
             DEAD, dtype=np.float32)
-        
-        middle_start = WORLD_SIZE // 2
-        middle_end = middle_start + self.layers[self.base_layer]['res']
 
         # Use a single ALIVE pixel in the middle of the CA world as the initial
         # phenotype state for all individuals in the population.
         for i in range(n):
-            phenotypes[i][0][self.base_layer][middle_start:middle_end, middle_start:middle_end] = ALIVE
+            phenotypes[i][0][0][WORLD_SIZE // 2, WORLD_SIZE // 2] = ALIVE
 
         return phenotypes
     
