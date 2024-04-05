@@ -133,7 +133,7 @@ class Solution:
 
     def get_layer_state_indices(self, l):
         n_above = 0 if l == (self.n_layers-1) else 1
-        n_below = 0 if l == 0 else int((self.layers[l]['res'] / self.layers[l-1]['res'])**2)
+        n_below = 4 # 0 if l == 0 else int((self.layers[l]['res'] / self.layers[l-1]['res'])**2)
         n_around = 9 # Moore neighborhood
 
         # below, around, above
