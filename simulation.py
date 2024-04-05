@@ -289,7 +289,7 @@ def simulate(state_genotypes, num_layers, around_start, above_start, phenotypes,
     return phenotypes
 
 
-def make_seed_phenotypes(pop_size, n_layers=3):
+def make_seed_phenotypes(pop_size, n_layers=4):
     """Starting phenotypes to use by default (one ALIVE cell in middle)."""
     # For each inidividual, capture phenotype development over NUM_STEPS. Each
     # phenotype has NUM_LAYERS layers which are all WORLD_SIZE x WORLD_SIZE
