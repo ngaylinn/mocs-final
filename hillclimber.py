@@ -60,7 +60,7 @@ class HillClimber:
             for stat in top_stats[:3]:
                 print(stat)
 
-            if self.current_generation >= 3000 and self.current_generation % 1000 == 0:
+            if self.current_generation >= 2000 and self.current_generation % 1000 == 0:
                 self.pickle_hc(f'{self.exp_name}_hc_testeroni_{self.current_generation}.pkl')
 
         return self.best_solution()
