@@ -2,6 +2,7 @@ import functools
 import time
 import pickle
 from collections import Counter
+import tracemalloc
 
 import numpy as np
 
@@ -17,6 +18,7 @@ activation2int = {
 
 class HillClimber:
     def __init__(self, experiment_constants):
+        self.exp_name = experiment_constants['name']
         self.max_generations = experiment_constants['max_generations']
         self.target_population_size = experiment_constants['target_population_size']
         self.layers = experiment_constants['layers']
@@ -45,10 +47,21 @@ class HillClimber:
 
     def evolve(self):
         self.initialize_population()
+        
+        tracemalloc.start()
         while self.current_generation <= self.max_generations:
             print(f'Generation {self.current_generation}')
             self.evolve_one_generation()
             self.current_generation += 1
+
+            snapshot = tracemalloc.take_snapshot()
+            top_stats = snapshot.statistics('lineno')
+
+            for stat in top_stats[:3]:
+                print(stat)
+
+            if self.current_generation >= 3000 and self.current_generation % 1000 == 0:
+                self.pickle_hc(f'{self.exp_name}_hc_testeroni_{self.current_generation}.pkl')
 
         return self.best_solution()
 
@@ -85,7 +98,7 @@ class HillClimber:
             self.children_population[id].set_fitness(fitness_scores[i])
             self.children_population[id].set_simulated(True)
             # self.children_population[id].set_full_phenotype(phenotypes[i])
-            self.children_population[id].set_phenotype(binarized_phenotypes[i]) # phenotype is now binarized last step of base layer
+            self.children_population[id].set_phenotype(phenotypes[i][-1][self.base_layer] > 0) # phenotype is now binarized last step of base layer
             # Get actual parent Solution object from population using parent_id
             parent_id = self.children_population[id].parent_id
             parent = self.parent_population[parent_id] if parent_id is not None else None
@@ -198,7 +211,7 @@ class HillClimber:
 
         for _, parent in self.parent_population.items():
             parent.fitness_history.append(parent.fitness)
-            parent.phenotype_history.append(parent.phenotype)
+            # parent.phenotype_history.append(parent.phenotype)
             # parent.signaling_distance_history.append(parent.signaling_distance)
             parent.phenotype_distance_history.append(parent.phenotype_distance)
 
