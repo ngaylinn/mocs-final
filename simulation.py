@@ -309,6 +309,30 @@ def make_seed_phenotypes(pop_size, n_layers=4):
 
     return phenotypes
 
+def make_seed_phenotypes_layer(n, n_layers, base_layer):
+        """Starting phenotypes to use by default (one ALIVE cell in middle)."""
+        # For each inidividual, capture phenotype development over NUM_STEPS. Each
+        # phenotype has NUM_LAYERS layers which are all WORLD_SIZE x WORLD_SIZE
+        # squares. Layer0 is the "ground truth" of the CA while layers 1 and 2
+        # represent a sort of hierarchical internal state for the organism. Layers
+        # 1 and 2 are conceptually smaller than layer0 (1/4 and 1/8 respectively),
+        # but are represented using arrays of the same size for simplicity.
+        phenotypes = np.full(
+            (n, NUM_STEPS, n_layers, WORLD_SIZE, WORLD_SIZE),
+            DEAD, dtype=np.float32)
+        
+        g = 1 << base_layer
+        
+        middle_start = WORLD_SIZE // 2
+        middle_end = middle_start + g
+
+        # Use a single ALIVE pixel in the middle of the CA world as the initial
+        # phenotype state for all individuals in the population.
+        for i in range(n):
+            phenotypes[i][0][base_layer][middle_start:middle_end, middle_start:middle_end] = ALIVE
+
+        return phenotypes
+
 def make_seed_genotypes(pop_size):
     """Starting genotypes: random initialization"""
     # Randomly initialize the NN weights
