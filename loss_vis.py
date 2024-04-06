@@ -3,6 +3,8 @@ from matplotlib.colors import ListedColormap
 
 import numpy as np
 
+from util import create_diamond, create_hollow_circle, create_square
+
 # this script is purely for visualization purposes!!
 
 def draw_initial_ca(grid_size=64, shape_size=32):
@@ -135,7 +137,56 @@ def plot_selection_area(data_64x64, data_32x32, data_16x16, data_8x8, color_maps
     plt.tight_layout()
     plt.show()
 
+
+def plot_binary_arrays(b64,b32,b16,b8,colors):
+    # Validate color input
+    # if not isinstance(color, str):
+    #     raise ValueError("Color must be a string representing a color.")
     
+    # Create custom colormap: 0s to white, 1s to the specified color
+    cmaps = [
+        ListedColormap(['white', colors[0]]),
+        ListedColormap(['white', colors[1]]),
+        ListedColormap(['white', colors[2]]),
+        ListedColormap(['white', colors[3]]),
+    ]
+    
+    # Define the sizes of the arrays
+    # sizes = [64, 32, 16, 8]
+    
+    # Create the binary arrays with random values for demonstration purposes
+    # arrays = [np.random.choice([0, 1], size=(size, size)) for size in sizes]
+    arrays = [b64, b32, b16, b8]
+    # Set up the figure and axes for plotting
+    # Set up the figure and axes for plotting
+    fig, axs = plt.subplots(1, 4, figsize=(12, 3))  # Ensure plots are visually the same size
+    
+    # Plot each array
+    i=0
+    for ax, array in zip(axs, arrays):
+        # Display the image
+        im = ax.imshow(array, cmap=cmaps[i], interpolation='nearest')
+        
+        # Optionally, overlay a grid to help distinguish cells
+        # Calculate the spacing for the grid
+        ax.set_xticks(np.arange(-.5, array.shape[1], 1), minor=True)
+        ax.set_yticks(np.arange(-.5, array.shape[0], 1), minor=True)
+        ax.grid(which="minor", color="black", linestyle='-', linewidth=0.1)
+        ax.tick_params(which="minor", size=0)
+        
+        # Hide the major ticks/labels
+        ax.tick_params(which="major", bottom=False, left=False, labelbottom=False, labelleft=False)
+
+        i+=1 
+    plt.tight_layout()
+    plt.show()
+
+b64 = create_hollow_circle(64)
+b32 = create_hollow_circle(32)
+b16 = create_hollow_circle(16)
+b8 = create_hollow_circle(8)
+
+plot_binary_arrays(b64, b32, b16, b8, ['blue', 'orange', 'green', 'red'])
 
 # data_64x64 = np.random.rand(64, 64)
 # data_32x32 = np.random.rand(32, 32)
@@ -145,6 +196,6 @@ def plot_selection_area(data_64x64, data_32x32, data_16x16, data_8x8, color_maps
 # plot_selection_area(data_64x64, data_32x32, data_16x16, data_8x8)
 
 
-# draw_initial_ca()
-# draw_final_ca()
+# # draw_initial_ca()
+# # draw_final_ca()
 
