@@ -17,8 +17,8 @@ activation2int = {
 }
 
 class HillClimber:
-    def __init__(self, experiment_constants):
-        self.exp_name = experiment_constants['name']
+    def __init__(self, experiment_constants, exp_directory='.'):
+        self.exp_directory = exp_directory
         self.max_generations = experiment_constants['max_generations']
         self.target_population_size = experiment_constants['target_population_size']
         self.layers = experiment_constants['layers']
@@ -61,7 +61,7 @@ class HillClimber:
                 print(stat)
 
             if self.current_generation >= 2000 and self.current_generation % 1000 == 0:
-                self.pickle_hc(f'{self.exp_name}_hc_testeroni_{self.current_generation}.pkl')
+                self.pickle_hc(f'{self.exp_directory}/hc_{self.current_generation}.pkl')
 
         return self.best_solution()
 

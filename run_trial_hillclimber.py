@@ -36,14 +36,16 @@ if not os.path.exists(f'./experiments/{args.exp_name}'):
 os.system(f'cp {args.exp_file} ./experiments/{args.exp_name}')
 
 def main():
+    exp_directory = f'./experiments/{args.exp_name}/{args.arm_name}'
     # Create an arm directory if it doesn't already exist
-    if not os.path.exists(f'./experiments/{args.exp_name}/{args.arm_name}'):
-        os.system(f'mkdir ./experiments/{args.exp_name}/{args.arm_name}')
+    if not os.path.exists(exp_directory):
+        os.system(f'mkdir {exp_directory}')
 
-    single_run = HillClimber(arm_parameters)
+    single_run = HillClimber(arm_parameters, exp_directory)
     single_run.evolve()
 
     single_run.pickle_hc(f'./experiments/{args.exp_name}/{args.arm_name}/{args.arm_name}_t{args.trial}.pkl')
 
 if __name__ == '__main__':
     main()
+ 

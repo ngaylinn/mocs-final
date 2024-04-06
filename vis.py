@@ -91,9 +91,8 @@ color_dict = {
     }
 }
 
-def visualize_selection_layer_over_time(phenotype, filename, base_layer_idx, target_shape, color):
+def visualize_selection_layer_over_time(phenotype, filename, base_layer_idx, target_shape, color, frames=[0, 5, 10, 50, 99]):
     # Frame indices
-    frames = [0, 5, 10, 50, 99]
 
     n_layers, l, w = phenotype[frames[0]].shape
 
@@ -128,9 +127,7 @@ def visualize_selection_layer_over_time(phenotype, filename, base_layer_idx, tar
 
     combined_image.save(filename)
 
-def visualize_layer_over_time(phenotype, filename, layer_idx, target_shape):
-    # Frame indices
-    frames = [0, 5, 10, 50, 99]
+def visualize_layer_over_time(phenotype, filename, layer_idx, target_shape, frames = [0, 5, 10, 50, 99]):
 
     n_layers, l, w = phenotype[frames[0]].shape
 
@@ -167,6 +164,56 @@ def visualize_layer_over_time(phenotype, filename, layer_idx, target_shape):
 
     combined_image.save(filename)
 
+def visualize_layers_and_selection_over_time(phenotype, filename, base_layer_idx, target_shape, color, frames=[0, 5, 10, 50, 99]):
+    # Frame indices
+
+    n_layers, l, w = phenotype[frames[0]].shape
+
+    # Set the desired gap size between panels (you can adjust this value)
+    gap_size = 5  # Adjust this value as needed
+
+    # Calculate the total width for the new image with gaps
+    total_width = w * len(frames) + gap_size * (len(frames) - 1) + len(frames)
+    total_height = (n_layers+1)*l + gap_size * n_layers + len(frames)
+
+    # Create a new image with the calculated total width
+    combined_image = Image.new('RGBA', (total_width, total_height))
+
+    for i, frame_data in enumerate(phenotype[frames]):
+        base_layer = frame_data[base_layer_idx]
+
+        base = np.array(
+            np.bitwise_or(
+                np.bitwise_or(
+                    (np.bitwise_and((base_layer != DEAD), (target_shape != DEAD))) * color_dict[color]['live_inside'],   # live correct 
+                    (np.bitwise_and((base_layer == DEAD), (target_shape != DEAD))) * color_dict[color]['dead_inside']),
+                np.bitwise_or(
+                    (np.bitwise_and((base_layer != DEAD), (target_shape == DEAD))) * color_dict[color]['live_outside'],
+                    (np.bitwise_and((base_layer == DEAD), (target_shape == DEAD))) * color_dict[color]['dead_outside'])
+                ), # ALIVE cells are white
+            dtype=np.uint32)
+
+        # Base layer first
+        base_img = Image.fromarray(base, mode='RGBA')
+        base_img = ImageOps.expand(base_img, border=1, fill=(0, 0, 0, 255))
+        combined_image.paste(base_img, (i * (w + gap_size), gap_size))
+
+        # Now add the other layers
+        for layer_idx in reversed(range(n_layers)):
+            layer_data = frame_data[layer_idx]
+            img = Image.fromarray(layer_data, mode='RGBA')
+
+            # Increase opacity to full
+            datas = img.getdata()
+            newData = []
+            for item in datas:
+                newData.append(item[:3] + (255,))  # Change alpha to 255
+            img.putdata(newData)
+            
+            img_enhanced = ImageOps.expand(img, border=1, fill=(0, 0, 0, 255))
+            combined_image.paste(img_enhanced, (i * (w + gap_size), gap_size + ( n_layers-layer_idx) * (l + gap_size)))
+
+    combined_image.save(filename)
 # def simulate_one_individual(solution : Solution):
 #     init_phenotypes = make_seed_phenotypes(1, n_layers=solution.n_layers)
 #     print(solution.n_layers)
@@ -185,7 +232,7 @@ def visualize_layer_over_time(phenotype, filename, layer_idx, target_shape):
 #     return phenotypes[0]
 
 def simulate_one_individual(afpo, solution : Solution):
-    init_phenotypes = make_seed_phenotypes(1, n_layers=solution.n_layers)
+    init_phenotypes = make_seed_phenotypes(1, n_layers=afpo.n_layers)
     print(solution.n_layers)
 
     phenotypes = simulate(
@@ -368,13 +415,23 @@ if __name__ == '__main__':
 #     # print(exp.get_target_shape())
 
     best = exp.best_solution()
+    # best = exp.parent_population[list(exp.parent_population.keys())[0]]
     print(best.fitness)
-    print(best.n_layers)
+    # print(best.n_layers)
     exp_best_phenotype = simulate_one_individual(exp, best)
+
+
+    print(exp_best_phenotype[-1][exp.base_layer])
+    print(sum(exp_best_phenotype[-1][exp.base_layer]))
+    print((exp_best_phenotype[-1][exp.base_layer] == True).all())
+    print((exp_best_phenotype[-1][exp.base_layer] == False).all())
+
+    fitnesses = exp.evaluate_phenotypes(np.array([exp_best_phenotype]))
+    print(fitnesses)
     print(exp_best_phenotype.shape)
 
-    print(sum(exp_best_phenotype[-1, 3] > 0))
-    visualize_all_layers(exp_best_phenotype, 'square_4l.gif')
+    # print(sum(exp_best_phenotype[-1, 3] > 0))
+    visualize_all_layers(exp_best_phenotype, 'square_4l.gif', base_layer_idx=exp.base_layer)
 
     print('hello?')
     
