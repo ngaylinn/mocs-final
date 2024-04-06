@@ -9,7 +9,7 @@ from PIL import Image
 from PIL import ImageOps, ImageEnhance
 
 from afpo import Solution, AgeFitnessPareto, activation2int
-from simulation import simulate, make_seed_phenotypes, DEAD, ALIVE
+from simulation import simulate, make_seed_phenotypes, DEAD, ALIVE, make_seed_phenotypes_layer
 
 # def visualize_selection_layer_over_time(phenotype, filename, base_layer_idx):
 #     # Frame indices
@@ -232,7 +232,7 @@ def visualize_layers_and_selection_over_time(phenotype, filename, base_layer_idx
 #     return phenotypes[0]
 
 def simulate_one_individual(afpo, solution : Solution):
-    init_phenotypes = make_seed_phenotypes(1, n_layers=afpo.n_layers)
+    init_phenotypes = make_seed_phenotypes_layer(1, n_layers=afpo.n_layers, base_layer=afpo.base_layer)
     print(solution.n_layers)
 
     phenotypes = simulate(
@@ -420,25 +420,17 @@ if __name__ == '__main__':
     # print(best.n_layers)
     exp_best_phenotype = simulate_one_individual(exp, best)
 
-
-    print(exp_best_phenotype[-1][exp.base_layer])
-    print(sum(exp_best_phenotype[-1][exp.base_layer]))
-    print((exp_best_phenotype[-1][exp.base_layer] == True).all())
-    print((exp_best_phenotype[-1][exp.base_layer] == False).all())
-
-    fitnesses = exp.evaluate_phenotypes(np.array([exp_best_phenotype]))
-    print(fitnesses)
-    print(exp_best_phenotype.shape)
-
     # print(sum(exp_best_phenotype[-1, 3] > 0))
-    visualize_all_layers(exp_best_phenotype, 'square_4l.gif', base_layer_idx=exp.base_layer)
+    visualize_all_layers(exp_best_phenotype, 'trial.gif', base_layer_idx=exp.base_layer)
+
+
 
     print('hello?')
     
     # exp_best_phenotype = simulate_one_individual(exp, exp.best_solution())
     # print(exp_best_phenotype)
-#     save_folder = '/'.join(args.exp.split('/')[:-2]) + '/vis'
-#     file_name = args.exp.split('/')[-1]
+    save_folder = '/'.join(args.exp.split('/')[:-2]) + '/vis'
+    file_name = args.exp.split('/')[-1]
 #     os.makedirs(f'{save_folder}', exist_ok=True)
 
 #     # visualize_all_layers(exp_best_phenotype, 
@@ -447,30 +439,30 @@ if __name__ == '__main__':
 
 #     print('total weights: ', exp.best_fitness_history[0].total_weights, exp.best_fitness_history[0].state_n_weights, exp.best_fitness_history[0].growth_n_weights)
 
+    # exp.shape = 'square'
+    # visualize_layer_over_time(exp_best_phenotype, 
+    #                             f'{save_folder}/{file_name}_state_overtime_l0.png', 
+    #                             layer_idx=exp.base_layer,
+    #                             target_shape=exp.get_target_shape(),
+    #                             )
+    # visualize_layer_over_time(exp_best_phenotype, 
+    #                             f'{save_folder}/{file_name}_state_overtime_l1.png', 
+    #                             layer_idx=exp.base_layer+1,
+    #                             target_shape=exp.get_target_shape(),
+    #                             )
+    # visualize_layer_over_time(exp_best_phenotype, 
+    #                             f'{save_folder}/{file_name}_state_overtime_l2.png', 
+    #                             layer_idx=exp.base_layer+2,
+    #                             target_shape=exp.get_target_shape(),
+    #                             )
+    # visualize_layer_over_time(exp_best_phenotype, 
+    #                             f'{save_folder}/{file_name}_state_overtime_l3.png', 
+    #                             layer_idx=exp.base_layer+3,
+    #                             target_shape=exp.get_target_shape(),
+    #                             )
 #     # exp.shape = 'square'
-#     visualize_layer_over_time(exp_best_phenotype, 
-#                                 f'{save_folder}/{file_name}_state_overtime_l0.png', 
-#                                 layer_idx=exp.base_layer,
-#                                 target_shape=exp.get_target_shape(),
-#                                 )
-#     visualize_layer_over_time(exp_best_phenotype, 
-#                                 f'{save_folder}/{file_name}_state_overtime_l1.png', 
-#                                 layer_idx=exp.base_layer+1,
-#                                 target_shape=exp.get_target_shape(),
-#                                 )
-#     visualize_layer_over_time(exp_best_phenotype, 
-#                                 f'{save_folder}/{file_name}_state_overtime_l2.png', 
-#                                 layer_idx=exp.base_layer+2,
-#                                 target_shape=exp.get_target_shape(),
-#                                 )
-#     visualize_layer_over_time(exp_best_phenotype, 
-#                                 f'{save_folder}/{file_name}_state_overtime_l3.png', 
-#                                 layer_idx=exp.base_layer+3,
-#                                 target_shape=exp.get_target_shape(),
-#                                 )
-#     # exp.shape = 'square'
-#     # visualize_selection_layer_over_time(exp_best_phenotype, 
-#     #                                     f'{save_folder}/{file_name}_overtime.png', 
-#     #                                     base_layer_idx=exp.base_layer,
-#     #                                     target_shape=exp.get_target_shape(),
-#     #                                     color='green')
+    visualize_selection_layer_over_time(exp_best_phenotype, 
+                                        f'{save_folder}/{file_name}_overtime.png', 
+                                        base_layer_idx=exp.base_layer,
+                                        target_shape=exp.get_target_shape(),
+                                        color='red')
