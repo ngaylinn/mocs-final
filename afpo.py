@@ -57,6 +57,9 @@ class Solution:
     def increment_age(self):
         self.age += 1
 
+    def set_age(self, new_age):
+        self.age = new_age
+
     def set_phenotype(self, phenotype):
         self.phenotype = phenotype
 
@@ -239,12 +242,14 @@ class AgeFitnessPareto:
         print(f'Finished in {elapsed:0.2f} seconds ({lps:0.2f} lifetimes per second).')
 
         # Evaluate each phenotype's fitness
-        fitness_scores = self.evaluate_phenotypes(phenotypes)
+        fitness_scores, _ = self.evaluate_phenotypes(phenotypes)
 
         parent_child_distances = []
         n_neutral = 0
         # Set the fitness and simulated flag for each of the solutions just evaluated 
         for i, idx in enumerate(unsimulated_indices):
+            if fitness_scores[i] == 999999:
+                self.population[idx].set_age(999999)    
             self.population[idx].set_fitness(fitness_scores[i])
             self.population[idx].set_simulated(True)
             self.population[idx].set_phenotype(phenotypes[i][-1][self.base_layer] > 0) # phenotype is now binarized last step of base layer
@@ -275,11 +280,45 @@ class AgeFitnessPareto:
         self.n_neutral_over_generations.append(n_neutral)
 
 
+    # def initialize_population(self):
+    #     # Initialize target_population_size random solutions
+    #     self.population = [
+    #         Solution(layers=self.layers, id=self.get_available_id()) for _ in range(self.target_population_size)
+    #     ]
+
     def initialize_population(self):
-        # Initialize target_population_size random solutions
-        self.population = [
-            Solution(layers=self.layers, id=self.get_available_id()) for _ in range(self.target_population_size)
-        ]
+        # Make sure all solutions are "interesting"
+        # i.e. all solutions' phenotypes are NOT all zeros or all ones
+        while len(self.population) < self.target_population_size:
+            print('Initial population length: ', len(self.population))
+            print(Counter([sol.fitness for sol in self.population]))
+
+            # Initialize target_population_size random solutions
+            preliminary_pop = [Solution(layers=self.layers, id=self.get_available_id()) for _ in range(self.target_population_size)]
+
+            # simulate the preliminary population
+            unsimulated_genotypes = np.array([sol.state_genotype for sol in preliminary_pop])
+            init_phenotypes = self.make_seed_phenotypes(unsimulated_genotypes.shape[0])
+            phenotypes = simulate(
+                unsimulated_genotypes, 
+                self.n_layers, 
+                preliminary_pop[0].around_start, 
+                preliminary_pop[0].above_start, 
+                init_phenotypes, 
+                self.below_map,
+                self.above_map)
+            
+            fitness_scores, phenotypes = self.evaluate_phenotypes(phenotypes)
+            print(Counter(fitness_scores))
+
+            for i, sol in enumerate(preliminary_pop):
+                if fitness_scores[i] != 999999:
+                    self.population.append(sol)
+                    # Stop adding to initial population if we've reached target_population_size
+                    if len(self.population) > self.target_population_size:
+                        break
+
+            print(self.population[:10], len(self.population))
 
     def generate_new_individuals(self):
         new_individuals = []
@@ -379,14 +418,29 @@ class AgeFitnessPareto:
         # Allocate space for results.
         fitness_scores = np.zeros(pop_size, dtype=np.uint32)
 
+        binarized_phenotypes = []
+
+        # For each individual in the population...
         # For each individual in the population...
         for i in range(pop_size):
             # Look at just the final state of the layer0 part of the phenotype.
             # Compare it to the target image, and sum up the deltas to get the
             # final fitness score (lower is better, 0 is a perfect score).
-            fitness_scores[i] = np.sum(np.abs(target - (phenotypes[i][-1][self.base_layer] > 0)))
+            binarized_phenotype = (phenotypes[i][-1][self.base_layer] > 0)
+            binarized_phenotypes.append(binarized_phenotype)
 
-        return fitness_scores
+            fitness_scores[i] = np.sum(np.abs(target - binarized_phenotype))
+            if binarized_phenotype.all(): # All ones
+                fitness_scores[i] = 999999
+            elif (binarized_phenotype == False).all(): 
+                fitness_scores[i] = 999999
+            else:
+                fitness_scores[i] = np.sum(np.abs(target - (phenotypes[i][-1][self.base_layer] > 0)))
+                fitness_scores[i] += np.sum(np.abs(target - (phenotypes[i][-2][self.base_layer] > 0)))
+                fitness_scores[i] += np.sum(np.abs(target - (phenotypes[i][-3][self.base_layer] > 0)))
+                fitness_scores[i] += np.sum(np.abs(target - (phenotypes[i][-4][self.base_layer] > 0)))
+
+        return fitness_scores, np.array(binarized_phenotypes)
 
 
     # @functools.cache
@@ -402,13 +456,10 @@ class AgeFitnessPareto:
             (n, NUM_STEPS, self.n_layers, WORLD_SIZE, WORLD_SIZE),
             DEAD, dtype=np.float32)
         
-        middle_start = WORLD_SIZE // 2
-        middle_end = middle_start + self.layers[self.base_layer]['res']
-
         # Use a single ALIVE pixel in the middle of the CA world as the initial
         # phenotype state for all individuals in the population.
         for i in range(n):
-            phenotypes[i][0][self.base_layer][middle_start:middle_end, middle_start:middle_end] = ALIVE
+            phenotypes[i][0][0][WORLD_SIZE//2, WORLD_SIZE//2] = ALIVE
 
         return phenotypes
     
