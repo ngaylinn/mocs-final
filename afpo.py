@@ -16,12 +16,14 @@ activation2int = {
 
 @functools.total_ordering # Sortable by fitness
 class Solution:
-    def __init__(self, layers, id, parent_id=None):
+    def __init__(self, layers, id, above_map, below_map, parent_id=None):
         self.id = id
         self.parent_id = parent_id
         self.layers = layers
         self.n_layers = len(self.layers)
         self.base_layer = next((i for i, d in enumerate(self.layers) if d.get('base', False)), None)
+        self.above_map = above_map
+        self.below_map = below_map
         self.age = 0
         self.been_simulated = False
         self.fitness = None
@@ -40,7 +42,7 @@ class Solution:
         self.randomize_genome()
 
     def make_offspring(self, new_id, mutate_layers=None):
-        child = Solution(layers=self.layers, id=new_id, parent_id=self.id)
+        child = Solution(layers=self.layers, id=new_id, above_map=self.above_map, below_map=self.below_map, parent_id=self.id)
         child.state_genotype = self.state_genotype.copy()
         if mutate_layers is None:
             child.mutate()
