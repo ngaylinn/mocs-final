@@ -7,7 +7,7 @@ import tracemalloc
 import numpy as np
 
 from afpo import Solution, WORLD_SIZE, NUM_STEPS, NUM_LAYERS, DEAD, ALIVE, ACTIVATION_SIGMOID, ACTIVATION_RELU, ACTIVATION_TANH
-from simulation import simulate, get_layer_mask, DEAD, ALIVE, WORLD_SIZE, NUM_STEPS, NUM_LAYERS, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS, ACTIVATION_SIGMOID, ACTIVATION_RELU, ACTIVATION_TANH
+from simulation import simulate, get_layer_mask, DEAD, ALIVE, WORLD_SIZE, NUM_STEPS, NUM_LAYERS, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS, ACTIVATION_SIGMOID, ACTIVATION_RELU, ACTIVATION_TANH, compress_arr
 from util import create_hollow_circle, create_square, create_diamond, create_plus
 
 activation2int = {
@@ -72,24 +72,21 @@ class HillClimber:
         unsimulated_children_genotypes = self.get_children_genotypes()
         init_phenotypes = self.make_seed_phenotypes(unsimulated_children_genotypes.shape[0])
 
-        rand_id = list(self.children_population.keys())[0]
-
         ##### SIMULATE ON GPUs #####
         print(f'Starting {self.target_population_size} simulations...')
         phenotypes = simulate(
             unsimulated_children_genotypes, 
             self.n_layers, 
-            self.children_population[rand_id].around_start, 
-            self.children_population[rand_id].above_start, 
-            init_phenotypes, 
-            self.below_map,
-            self.above_map)
+            init_phenotypes)
 
         elapsed = time.perf_counter() - start
         lps = self.target_population_size / elapsed
         print(f'Finished in {elapsed:0.2f} seconds ({lps:0.2f} lifetimes per second).')
 
-        fitness_scores, binarized_phenotypes = self.evaluate_phenotypes(phenotypes)
+        start = time.perf_counter()
+        fitness_scores, _ = self.evaluate_phenotypes(phenotypes)
+        elapsed = time.perf_counter() - start
+        print(f'Evaluating phenotypes took {elapsed:0.2f} seconds')
 
         parent_child_distances = []
         parent_child_fitnesses = []
@@ -109,7 +106,7 @@ class HillClimber:
         # Reduce the population by selecting parent or child to remove
         n_neutral_children, beneficial_mutations = self.select()
         # Extend the population using tournament selection
-        mutation_data = self.mutate_population()
+        self.mutate_population()
 
         mean_fitness = np.mean([sol.fitness for id, sol in self.parent_population.items()])
         self.parent_child_fitness_history.append(parent_child_fitnesses)
@@ -118,7 +115,7 @@ class HillClimber:
         self.fitness_history.append([sol.fitness for id, sol in self.parent_population.items()])
         # self.mean_fitness_history.append(np.mean([sol.fitness for id, sol in self.parent_population.items()]))
         self.parent_child_distance_history.append(parent_child_distances)
-        self.mutation_data_over_generations.append(mutation_data)
+        # self.mutation_data_over_generations.append(mutation_data)
         self.beneficial_mutations_over_generations.append(beneficial_mutations)
 
         print('Average fitness:', mean_fitness)
@@ -147,11 +144,7 @@ class HillClimber:
             phenotypes = simulate(
                 unsimulated_genotypes, 
                 self.n_layers, 
-                preliminary_pop[list(preliminary_pop.keys())[0]].around_start, 
-                preliminary_pop[list(preliminary_pop.keys())[0]].above_start, 
-                init_phenotypes, 
-                self.below_map,
-                self.above_map)
+                init_phenotypes)
             
             fitness_scores, phenotypes = self.evaluate_phenotypes(phenotypes)
             print(Counter(fitness_scores))
@@ -229,26 +222,18 @@ class HillClimber:
             child = solution.make_offspring(new_id=new_id, mutate_layers=self.mutate_layers)
             self.children_population[new_id] = child
 
-        aggregate_mutation_data = {
-            'layer': list([solution.mutation_info['layer'] for i, solution in self.children_population.items()]),
-            'kind': list([solution.mutation_info['kind'] for i, solution in self.children_population.items()])
-        }
-        return aggregate_mutation_data
-
-
     def get_children_genotypes(self):
         children_genotypes = [sol.state_genotype for _, sol in self.children_population.items()]
         # Aggregate the genotypes into a single matrix for simulation
         return np.array(children_genotypes, dtype=np.float32)
 
-    def get_target_shape(self):
+    def get_target_shape(self, timesteps=1, target_size=64):
         """
         Returns the target shape using self.shape and the resolution of self.base_layer.
         Always returns 64x64 numpy array. 
         """
 
         resolution = self.layers[self.base_layer]['res']
-        target_size = WORLD_SIZE // resolution
 
         assert resolution in [2**n for n in range(int(np.log2(WORLD_SIZE)) + 1)]
 
@@ -262,16 +247,30 @@ class HillClimber:
             target = create_plus(target_size)
 
         # Upsize back to 64x64 because that's how we're comparing 
-        while target.shape[0] < 64: 
-            target = np.repeat(np.repeat(target, 2, axis=0), 2, axis=1)
-        assert target.shape[0] == 64
+        # while target.shape[0] < 64: 
+            # target = np.repeat(np.repeat(target, 2, axis=0), 2, axis=1)
+        # assert target.shape[0] == 64
+
+        target = np.array([target for _ in range(timesteps)])
+
+        print('target shape: ', target.shape)
 
         return target
         
 
-    def evaluate_phenotypes(self, phenotypes):
+    def compress_to_8x8(self, binary_array):
+        compressed_array = np.zeros((8, 8), dtype=bool)
+
+        for i in range(0, binary_array.shape[0], 8):
+            for j in range(0, binary_array.shape[1], 8):
+                block = binary_array[i:i+8, j:j+8]
+                compressed_array[i//8, j//8] = np.any(block)
+
+        return compressed_array
+                                            
+    def evaluate_phenotypes(self, phenotypes, timesteps=10):
         """Score a set of phenotypes generated by the simulate function."""
-        target = self.get_target_shape()
+        target = self.get_target_shape(timesteps, target_size=8)
 
         # Infer pop_size from phenotypes
         pop_size = phenotypes.shape[0]
@@ -288,14 +287,32 @@ class HillClimber:
             # Look at just the final state of the layer0 part of the phenotype.
             # Compare it to the target image, and sum up the deltas to get the
             # final fitness score (lower is better, 0 is a perfect score).
-            binarized_phenotype = (phenotypes[i][-1][self.base_layer] > 0)
-            binarized_phenotypes.append(binarized_phenotype)
+            binarized_phenotype = (phenotypes[i, -timesteps:, self.base_layer] > 0)
 
-            fitness_scores[i] = np.sum(np.abs(target - binarized_phenotype))
-            if binarized_phenotype.all(): # All ones
+            # Coarse grain the phenotype to 8x8
+            coarse_grain_phenotype_8x8 = np.zeros((timesteps, 8,8))
+            for t in range(timesteps):
+                coarse_grain_phenotype_8x8[t] = self.compress_to_8x8(binarized_phenotype[t])
+                # coarse_grain_phenotype_8x8[t] = compress_arr(binarized_phenotype)
+            # binarized_phenotype = np.repeat(np.repeat(coarse_grain_phenotype_8x8, 8, 0), 8, 1)
+            binarized_phenotypes.append(coarse_grain_phenotype_8x8)
+
+            fitness_scores[i] = np.sum(np.abs(target - coarse_grain_phenotype_8x8))
+            if coarse_grain_phenotype_8x8.all(): # All ones
                 fitness_scores[i] = 999999
-            elif (binarized_phenotype == False).all(): 
+            elif (coarse_grain_phenotype_8x8 == 0).all(): 
                 fitness_scores[i] = 999999
+
+        
+            '''
+            if fitness_scores[i] == 360:
+                print(coarse_grain_phenotype_8x8)
+                print(fitness_scores[i])
+                import matplotlib.pyplot as plt
+                plt.imsave('phenotype.png', binarized_phenotype[0], cmap='viridis')
+                plt.imsave('phenotype_8x8.png', coarse_grain_phenotype_8x8[0], cmap='viridis')
+                exit(1)
+            '''
 
         return fitness_scores, np.array(binarized_phenotypes)
 

@@ -297,6 +297,8 @@ def visualize_all_layers(phenotype, filename, base_layer_idx=0):
         return combined_image
 
     frames = [make_frame(frame_data) for frame_data in phenotype]
+    frames[70].save('frame10.png')
+    frames[71].save('frame11.png')
     
     frames[0].save(filename, save_all=True, append_images=frames[1:], loop=0, duration=10)
 

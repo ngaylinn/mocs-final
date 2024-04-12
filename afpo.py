@@ -37,16 +37,16 @@ class Solution:
         self.signaling_distance_history = []
         self.phenotype_distance_history = []
         self.neutral_genotype_history = []
+        
         self.randomize_genome()
 
     def make_offspring(self, new_id, mutate_layers=None):
         child = Solution(layers=self.layers, id=new_id, parent_id=self.id)
+
         child.state_genotype = self.state_genotype.copy()
-        if mutate_layers is None:
-            child.mutate()
-        else:
-            assert [l in range(self.n_layers) for l in mutate_layers]
-            child.mutate_layers(mutate_layers)
+
+        child.mutate()
+
         child.neutral_counter = self.neutral_counter
         child.fitness_history = self.fitness_history
         child.signaling_distance_history = self.signaling_distance_history
@@ -71,42 +71,13 @@ class Solution:
 
     def get_fitness(self):
         return self.fitness
-    
-    def mutate_layers(self, layers):
-        """
-        Mutate a specific layer's genome by one weight
-        """
-        layer = np.random.choice(layers)
-        random_nonzero_indices = np.transpose(np.nonzero(self.state_genotype[layer]))
-        c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))][0]
-        self.state_genotype[layer, c] = np.random.random() * 2 - 1
-        
-        below_range, around_range, above_range = self.get_layer_state_indices(layer)
-        if c in range(*below_range):
-            kind = 'below'
-        elif c in range(*around_range):
-            kind = 'around'
-        elif c in range(*above_range):
-            kind = 'above'
-        else:
-            kind = None
-        self.mutation_info = {'kind': kind, 'layer': layer}
-        
 
     def mutate(self):
-        random_nonzero_indices = np.transpose(np.nonzero(self.state_genotype))
-        layer, c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))]
-        self.state_genotype[layer, c] = np.random.random() * 2 - 1
-        below_range, around_range, above_range = self.get_layer_state_indices(layer)
-        if c in range(*below_range):
-            kind = 'below'
-        elif c in range(*around_range):
-            kind = 'around'
-        elif c in range(*above_range):
-            kind = 'above'
-        else:
-            kind = None
-        self.mutation_info = {'layer': layer, 'kind': kind}
+        rand_channel = np.random.choice(range(self.n_layers))
+        rand_out = np.random.choice(range(self.n_layers))
+        rand_neighbor = np.random.choice(range(13))
+
+        self.state_genotype[rand_out, rand_neighbor, rand_channel] = np.random.random() * 2 - 1
 
     def dominates(self, other):
         return all([self.age <= other.age, self.fitness <= other.fitness])
@@ -149,37 +120,12 @@ class Solution:
     def randomize_genome(self):
         """
         Structure of genome:
-        - state_genotype: (n_layers, max_below + max_around + max_above)
+        - state_genotype: (n_layers, n_layers*13)) (13 for extended Moore neighborhood)
         """
-        max_below = max([self.get_layer_n_params(l)[0] for l in range(self.n_layers)])
-        max_around = max([self.get_layer_n_params(l)[1] for l in range(self.n_layers)])
-        max_above = max([self.get_layer_n_params(l)[2] for l in range(self.n_layers)])
-
-        # Starting indices for neighborhood and above parameters
-        self.around_start = int(max_below)
-        self.above_start = int(max_below + max_around)
-
-        total_param_space = int(max_above + max_around + max_below)
-        self.state_genotype = np.random.random((self.n_layers, total_param_space)).astype(np.float32) * 2 - 1
-
-        # Mask state genome
-        self.state_genotype[0, 0:self.around_start] = 0
-        self.state_genotype[self.n_layers-1, self.above_start:] = 0
+        self.state_genotype = np.random.random((self.n_layers, 13, self.n_layers)).astype(np.float32) * 2 - 1
 
         self.state_n_weights = np.count_nonzero(self.state_genotype)
         self.total_weights = self.state_n_weights
-
-    def randomize_state_genome(self):
-        self.state_genotype = np.random.random((self.n_layers, max([self.get_layer_n_params(l) for l in range(self.n_layers)]))).astype(np.float32) * 2 - 1
-        self.state_genotype_mask = np.zeros_like(self.state_genotype)
-        for l in range(self.n_layers):
-            below_index_range, neighborhood_index_range, above_index_range = self.get_layer_state_indices(l)
-            print(l, below_index_range, neighborhood_index_range, above_index_range)
-            self.state_genotype_mask[l, below_index_range[0]:below_index_range[1]] = 1
-            self.state_genotype_mask[l, neighborhood_index_range[0]:neighborhood_index_range[1]] = 1
-            self.state_genotype_mask[l, above_index_range[0]:above_index_range[1]] = 1
-
-        self.state_genotype *= self.state_genotype_mask
 
 
 class AgeFitnessPareto:
