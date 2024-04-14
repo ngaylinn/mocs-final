@@ -241,8 +241,8 @@ def simulate_one_individual(afpo, solution : Solution):
             solution.around_start, 
             solution.above_start, 
             phenotypes=init_phenotypes,
-            below_map=afpo.below_map,
-            above_map=afpo.above_map)
+            below_maps=np.array([solution.below_map]),
+            above_maps=np.array([solution.above_map]))
     
     return phenotypes[0]
 
@@ -420,8 +420,13 @@ if __name__ == '__main__':
     # print(best.n_layers)
     exp_best_phenotype = simulate_one_individual(exp, best)
 
+    print(exp_best_phenotype.shape)
+
+    fitnesses, _ = exp.evaluate_phenotypes(np.array([exp_best_phenotype]))
+    print(fitnesses)
+
     # print(sum(exp_best_phenotype[-1, 3] > 0))
-    visualize_all_layers(exp_best_phenotype, 'trial.gif', base_layer_idx=exp.base_layer)
+    # visualize_all_layers(exp_best_phenotype, 'trial.gif', base_layer_idx=exp.base_layer)
 
 
 
@@ -429,8 +434,8 @@ if __name__ == '__main__':
     
     # exp_best_phenotype = simulate_one_individual(exp, exp.best_solution())
     # print(exp_best_phenotype)
-    save_folder = '/'.join(args.exp.split('/')[:-2]) + '/vis'
-    file_name = args.exp.split('/')[-1]
+    # save_folder = '/'.join(args.exp.split('/')[:-2]) + '/vis'
+    # file_name = args.exp.split('/')[-1]
 #     os.makedirs(f'{save_folder}', exist_ok=True)
 
 #     # visualize_all_layers(exp_best_phenotype, 
@@ -461,8 +466,8 @@ if __name__ == '__main__':
     #                             target_shape=exp.get_target_shape(),
     #                             )
 #     # exp.shape = 'square'
-    visualize_selection_layer_over_time(exp_best_phenotype, 
-                                        f'{save_folder}/{file_name}_overtime.png', 
-                                        base_layer_idx=exp.base_layer,
-                                        target_shape=exp.get_target_shape(),
-                                        color='red')
+    # visualize_selection_layer_over_time(exp_best_phenotype, 
+    #                                     f'{save_folder}/{file_name}_overtime.png', 
+    #                                     base_layer_idx=exp.base_layer,
+    #                                     target_shape=exp.get_target_shape(),
+    #                                     color='red')
