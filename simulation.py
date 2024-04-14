@@ -104,24 +104,6 @@ def look_down(layer, phenotypes, genotypes, down_weights_start, pop_idx, step, r
 
 
 @cuda.jit
-def look_up(num_layers, layer, phenotypes, genotypes, up_weights_start, pop_idx, step, row, col, above_maps):
-    """Compute the weighted sum of this cell's neighbors in the layer above."""
-    if layer == num_layers - 1:
-        return 0
-    # Look at just the single neighbor in the next layer up.
-    g = 1 << layer
-    new_layer = above_maps[pop_idx][layer][0]
-    new_layer_g = 1 << new_layer
-    new_row = ((((row // g)*g) + ((above_maps[pop_idx][layer][1] // new_layer_g)*new_layer_g)) % WORLD_SIZE) # // new_layer_g
-    new_col = ((((col // g)*g) + ((above_maps[pop_idx][layer][2] // new_layer_g)*new_layer_g)) % WORLD_SIZE) # // new_layer_g
-    
-    neighbor_state = phenotypes[pop_idx][step-1][new_layer][new_row][new_col]
-    weight = genotypes[pop_idx, layer][up_weights_start]
-    # return 0.5
-    return neighbor_state * weight
-
-
-@cuda.jit
 def look_around(layer, phenotypes, genotypes, around_weights_start, pop_idx, step, row, col):
     """Compute the weighted sum of this cell's neighbors in this layer."""
     # The "granularity" of this layer. Layer0 == 1, layer1 == 2, layer2 == 4.
@@ -147,21 +129,20 @@ def look_around(layer, phenotypes, genotypes, around_weights_start, pop_idx, ste
 
 
 @cuda.jit
-def update_cell(num_layers, layer, phenotypes, state_genotypes, around_start, above_start, pop_idx, step, row, col, above_maps, below_maps):
+def update_cell(num_layers, layer, phenotypes, state_genotypes, around_start, pop_idx, step, row, col, below_maps):
     """Compute the next state for a single cell in layer0 from prev states."""
     # Calculate the weighted sum of all neighbors.
     down_signal_sum = look_down(layer, phenotypes, state_genotypes, 0, pop_idx, step, row, col, below_maps) # Should return 0 for L=0
     around_signal_sum = look_around(layer, phenotypes, state_genotypes, around_start, pop_idx, step, row, col)
-    up_signal_sum = look_up(num_layers, layer, phenotypes, state_genotypes, above_start, pop_idx, step, row, col, above_maps)
 
-    signal_sum = around_signal_sum + down_signal_sum + up_signal_sum #  + up_signal_sum
+    signal_sum = around_signal_sum + down_signal_sum 
 
     phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
         
 
 # Max registers can be tuned per device. 64 is the most my laptop can handle.
 @cuda.jit(max_registers=64)
-def simulation_kernel(state_genotypes, phenotypes, num_layers, around_start, above_start, above_maps, below_maps):
+def simulation_kernel(state_genotypes, phenotypes, num_layers, around_start, below_maps):
     """Compute and record the full development process of a population."""
     # Compute indices for this thread.
     pop_idx = cuda.blockIdx.x
@@ -176,7 +157,7 @@ def simulation_kernel(state_genotypes, phenotypes, num_layers, around_start, abo
         for col in range(start_col, start_col + COLS_PER_THREAD):
             # Update the state in every layer this individual uses.
             for layer in range(0, num_layers):
-                update_cell(num_layers, layer, phenotypes, state_genotypes, around_start, above_start, pop_idx, step, row, col, above_maps, below_maps)
+                update_cell(num_layers, layer, phenotypes, state_genotypes, around_start, pop_idx, step, row, col, below_maps)
         # Make sure all threads have finished computing this step before going
         # on to the next one.
         cuda.syncthreads()
@@ -209,7 +190,7 @@ def check_granularity(g, image):
     # return np.array_equal(image, scaled_up)
 
 
-def simulate(state_genotypes, num_layers, around_start, above_start, phenotypes, below_maps, above_maps):
+def simulate(state_genotypes, num_layers, around_start, phenotypes, below_maps):
     """Simulate genotypes and return phenotype videos."""
 
     # Infer population size from genotypes
@@ -234,14 +215,12 @@ def simulate(state_genotypes, num_layers, around_start, above_start, phenotypes,
     assert phenotypes.shape == (
         pop_size, NUM_STEPS, num_layers, WORLD_SIZE, WORLD_SIZE)
     
-    assert above_maps.shape == (pop_size, num_layers, 3)
     assert below_maps.shape == (pop_size, num_layers, 4, 3)
 
     # Copy input data from host memory to device memory.
     d_phenotypes = cuda.to_device(phenotypes)
     d_state_genotypes = cuda.to_device(state_genotypes)
     d_below_map = cuda.to_device(below_maps)
-    d_above_map = cuda.to_device(above_maps)
 
     # Actually run the simulation for all individuals in parallel on the GPU.
     simulation_kernel[
@@ -252,7 +231,7 @@ def simulate(state_genotypes, num_layers, around_start, above_start, phenotypes,
         # the CA world to compute, and the Y dimension is multiplied by
         # COLS_PER_THREAD to find the first column to start from.
         (WORLD_SIZE, COL_BATCH_SIZE)
-    ](d_state_genotypes, d_phenotypes, num_layers, around_start, above_start, d_above_map, d_below_map)
+    ](d_state_genotypes, d_phenotypes, num_layers, around_start, d_below_map)
 
     # Copy output data from device memory to host memory.
     phenotypes = d_phenotypes.copy_to_host()
@@ -397,27 +376,28 @@ def visualize(phenotype, filename, layer=0):
     frames[0].save(filename, save_all=True, append_images=frames[1:], loop=0, duration=10)
 
 def generate_random_below_map(n_layers=4):
+    '''
+    Generate below maps ONLY corresponding to layers AT or BELOW current layer
+    '''
     below_map = np.zeros((n_layers, 4, 3)).astype(int)
 
-    for l in range(n_layers):
+    for l in range(1, n_layers):
         for i in range(4):
-            rand_l = np.random.randint(n_layers)
+            rand_l = np.random.randint(l+1) # only at or below layer l
             rand_r_offset = np.random.randint(WORLD_SIZE)
             rand_c_offset = np.random.randint(WORLD_SIZE)
+            offset_sum = rand_r_offset + rand_c_offset
+            '''
+            while 2 >= offset_sum >= (WORLD_SIZE-1)*2: # Ensure no repeated neighbors
+                rand_r_offset = np.random.randint(WORLD_SIZE)
+                rand_c_offset = np.random.randint(WORLD_SIZE)
+                offset_sum = rand_r_offset + rand_c_offset
+            '''
             below_map[l, i] = [rand_l, rand_r_offset, rand_c_offset]
 
 
     return below_map
 
-def generate_random_above_map(n_layers=4):
-    above_map = np.zeros((n_layers, 3)).astype(int)
-    for l in range(n_layers):
-        rand_l = np.random.randint(n_layers)
-        rand_r_offset = np.random.randint(WORLD_SIZE)
-        rand_c_offset = np.random.randint(WORLD_SIZE)
-        above_map[l] = [rand_l, rand_r_offset, rand_c_offset]
-
-    return above_map
     
 def do_they_percolate(phenotypes):
     _, _, layers, _, _ = phenotypes.shape
