@@ -1,5 +1,29 @@
 import numpy as np
 
+def create_complex(N):
+    if N <= 6 or N % 2 != 0:
+        raise ValueError("N must be an even number greater than 6")
+
+    shape = np.array([
+        [0,0,0,0,0,0,0,0],
+        [0,1,1,1,1,1,0,0],
+        [0,1,1,0,0,1,1,0],
+        [0,0,0,0,0,1,0,0],
+        [0,1,1,1,0,1,0,0],
+        [0,1,0,1,1,1,1,0],
+        [0,1,1,1,0,1,0,0],
+        [0,0,0,0,0,0,0,0],
+    ])
+
+    if N == 8:
+        return shape
+    if N == 64:
+        return np.repeat(np.repeat(shape,8, axis=0),8, axis=1)
+
+    return shape 
+    
+
+
 def create_hollow_circle(N):
     if N <= 6 or N % 2 != 0:
         raise ValueError("N must be an even number greater than 6")
