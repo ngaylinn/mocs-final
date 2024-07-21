@@ -1,17 +1,16 @@
 {
-  'circle_l2_local_control': {
+  'complex_l1_local_control': {
     'optimizer': 'hillclimber',
     'num_trials': 1,
     'target_population_size': 500,
-    'max_generations': 4000,
+    'max_generations': 3000,
     'n_random_individuals_per_generation': 100,
     'mutate_layers': None,
     'neighbor_map_type': 'spatial',
     'sim_steps': 100,
-    'shape': 'circle',
+    'shape': 'complex',
     'layers': [
-        {'res': 8, 'base': True},
-        {'res': 8}
+        {'res': 8, 'base': True}
     ],
     'activation': 'sigmoid'
   },

@@ -310,8 +310,8 @@ def make_seed_phenotypes(pop_size, n_layers=4):
 
     # Use a single ALIVE pixel in the middle of the CA world as the initial
     # phenotype state for all individuals in the population.
+    middle = WORLD_SIZE // 2
     for i in range(pop_size):
-        middle = WORLD_SIZE // 2
         phenotypes[i][0][0][middle][middle] = ALIVE
 
     return phenotypes

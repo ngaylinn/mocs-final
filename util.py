@@ -17,10 +17,11 @@ def create_complex(N):
 
     if N == 8:
         return shape
-    if N == 64:
-        return np.repeat(np.repeat(shape,8, axis=0),8, axis=1)
-
-    return shape 
+    # simplify above code: 
+    if N in [16, 32, 64]:
+        return np.repeat(np.repeat(shape, N//8, axis=0), N//8, axis=1)
+    
+    return None
     
 
 

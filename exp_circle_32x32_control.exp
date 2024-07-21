@@ -1,0 +1,33 @@
+{
+  'circle_32x32_control_1layer': {
+    'optimizer': 'hillclimber',
+    'num_trials': 1,
+    'target_population_size': 500,
+    'max_generations': 3000,
+    'n_random_individuals_per_generation': 100,
+    'mutate_layers': None,
+    'neighbor_map_type': 'spatial',
+    'sim_steps': 100,
+    'shape': 'circle',
+    'layers': [
+        {'res': 1, 'base': True}
+    ],
+    'activation': 'sigmoid'
+  },
+  'circle_32x32_control_2layer': {
+    'optimizer': 'hillclimber',
+    'num_trials': 1,
+    'target_population_size': 500,
+    'max_generations': 3000,
+    'n_random_individuals_per_generation': 100,
+    'mutate_layers': None,
+    'neighbor_map_type': 'spatial',
+    'sim_steps': 100,
+    'shape': 'circle',
+    'layers': [
+        {'res': 1, 'base': True},
+        {'res': 1}
+    ],
+    'activation': 'sigmoid'
+  },
+}
