@@ -1,5 +1,9 @@
 # Hierarchical Neural CA Model of Morphogenesis
 
+GECCO 2024: https://dl.acm.org/doi/pdf/10.1145/3638529.3654150
+
+Reach out to corresponding author at kamtb28@gmail.com
+
 ## Specifying an Experiment
 
 Make an experiment file structured like this:
