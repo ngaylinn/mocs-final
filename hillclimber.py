@@ -26,6 +26,7 @@ class HillClimber:
         self.shape = experiment_constants['shape']
         self.mutate_layers = experiment_constants['mutate_layers']
         self.neighbor_map_type = experiment_constants['neighbor_map_type']
+        self.fitness_bin_size = experiment_constants['fitness_bin_size']
 
         self.n_layers = len(self.layers)
         self.base_layer = next((i for i, d in enumerate(self.layers) if d.get('base', False)), None)
@@ -90,12 +91,14 @@ class HillClimber:
         print(f'Finished in {elapsed:0.2f} seconds ({lps:0.2f} lifetimes per second).')
 
         fitness_scores, binarized_phenotypes = self.evaluate_phenotypes(phenotypes)
+        selection_fitness = fitness_scores - (fitness_scores % self.fitness_bin_size)
 
         parent_child_distances = []
         parent_child_fitnesses = []
         # Set the fitness and simulated flag for each of the just-evaluated solutions
         for i, id in enumerate(self.children_population):
             self.children_population[id].set_fitness(fitness_scores[i])
+            self.children_population[id].set_selection_fitness(selection_fitness[i])
             self.children_population[id].set_simulated(True)
             # self.children_population[id].set_full_phenotype(phenotypes[i])
             self.children_population[id].set_phenotype(phenotypes[i][-1][self.base_layer] > 0) # phenotype is now binarized last step of base layer
@@ -125,6 +128,8 @@ class HillClimber:
         print('Min fitness: ', min([sol.fitness for id, sol in self.parent_population.items()]))
         print('Average age:', np.mean([sol.age for id, sol in self.parent_population.items()]))
         print('Proportion neutral: ', n_neutral_children / self.target_population_size)
+        print('Hello?')
+        print(Counter([sol.selection_fitness for id, sol in self.parent_population.items()]))
         # print('Neutral path Counter: ', Counter(beneficial_mutations))
         # print('Neutrals: ', Counter([child.neutral_counter for child_id, child in self.children_population.items()]))
 
@@ -192,15 +197,15 @@ class HillClimber:
             if parent is not None:
                 # child.signaling_distance = np.sum(np.abs(child.full_phenotype - parent.full_phenotype))
                 child.phenotype_distance = self.children_population[child_id].get_distance_from_parent(parent)
-                if child.fitness == parent.fitness:
+                if child.selection_fitness == parent.selection_fitness:
                     n_neutral_children += 1
                     child.neutral_counter += 1
                     
-                if child.fitness < parent.fitness:
+                if child.selection_fitness < parent.selection_fitness:
                     beneficial_mutations.append(child.neutral_counter)
                     child.neutral_counter = 0
 
-                if child.fitness <= parent.fitness:
+                if child.selection_fitness <= parent.selection_fitness:
                     del self.parent_population[parent_id]
                     self.parent_population[child_id] = child
                 else:
@@ -260,6 +265,8 @@ class HillClimber:
             target = create_hollow_circle(target_size)
         elif self.shape == 'plus':
             target = create_plus(target_size)
+        elif self.shape == 'complex':
+            target = create_complex(target_size)
 
         # Upsize back to 64x64 because that's how we're comparing 
         while target.shape[0] < 64: 

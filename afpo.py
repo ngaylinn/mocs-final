@@ -25,6 +25,7 @@ class Solution:
         self.age = 0
         self.been_simulated = False
         self.fitness = None
+        self.selection_fitness = None
         self.phenotype = None
         self.full_phenotype = None
         self.mutation_info = None
@@ -68,6 +69,9 @@ class Solution:
 
     def set_fitness(self, fitness):
         self.fitness = fitness
+
+    def set_selection_fitness(self, fitness):
+        self.selection_fitness = fitness
 
     def get_fitness(self):
         return self.fitness
