@@ -400,14 +400,12 @@ def visualize_all_layers_last_timestep(phenotype, filename):
     frame.save(filename)
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--exp', type=str, default=None)
-args = parser.parse_args()
-
-experiment_pkl = args.exp
-
-
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--exp', type=str, default=None)
+    args = parser.parse_args()
+
+    experiment_pkl = args.exp
     with open(experiment_pkl, 'rb') as pf:
         exp = pickle.load(pf)
 

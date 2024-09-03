@@ -248,7 +248,6 @@ def simulate(state_genotypes, num_layers, around_start, above_start, phenotypes,
 
     assert phenotypes.shape == (
         pop_size, NUM_STEPS, num_layers, WORLD_SIZE, WORLD_SIZE)
-    
     assert above_map.shape == (num_layers, 3)
     assert below_map.shape == (num_layers, 4, 3)
 
