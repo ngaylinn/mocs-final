@@ -23,6 +23,10 @@ class NeutralEngine:
         self.pop_size = 400 # self.experiment.target_population_size
         # self.init_solution = Solution(layers=exp.layers, id=0)
         self.init_solution = init_solution
+        self.init_solution.fitness_history = []
+        self.init_solution.signaling_distance_history = []
+        self.init_solution.phenotype_history = []
+        # self.init_solution
         self.init_solution.state_genotype = self.init_genotype
         self.simulate_initial_genotype()
 
@@ -55,32 +59,34 @@ class NeutralEngine:
         """
         init_phenotypes = self.experiment.make_seed_phenotypes(self.pop_size)
         state_genotypes = np.array([sol.state_genotype for sol in self.child_population])
+
         
         # Simulate the random children 
         phenotypes = simulate(
             state_genotypes, 
             self.experiment.n_layers, 
             self.child_population[0].around_start, 
-            # self.child_population[0].above_start, 
+            self.child_population[0].above_start, 
             init_phenotypes, 
-            np.array([self.init_solution.below_map for _ in range(self.pop_size)])) # ,
-            # np.array([self.init_solution.above_map for _ in range(self.pop_size)])) # ,
+            np.array(self.experiment.below_map),
+            np.array(self.experiment.above_map)) # ,
             # self.experiment.above_map)
         
-        fitness_scores, _ = self.experiment.evaluate_phenotypes(phenotypes)
+        # fitness_scores, binarized_phenotypes = self.experiment.evaluate_phenotypes(phenotypes)
+        fitness_scores = self.experiment.evaluate_phenotypes(phenotypes)
 
-        init_parents_phenotypes = self.experiment.make_seed_phenotypes(len(self.parent_population))
         parent_ids = np.unique([sol.parent_id for sol in self.child_population])
         parent_state_genotypes = np.array([sol.state_genotype for sol in self.parent_population if sol.id in parent_ids])
-
+        init_parents_phenotypes = self.experiment.make_seed_phenotypes(len(parent_ids))
+        
         parent_phenotypes = simulate(
             parent_state_genotypes, 
             self.experiment.n_layers, 
             self.parent_population[0].around_start, 
-            # self.parent_population[0].above_start, 
+            self.parent_population[0].above_start, 
             init_parents_phenotypes, 
-            np.array([self.init_solution.below_map for _ in range(len(self.parent_population))])) # ,
-            # np.array([self.init_solution.above_map for _ in range(len(self.parent_population))])) # ,
+            np.array(self.experiment.below_map),
+            np.array(self.experiment.above_map)) # ,
             # self.experiment.above_map)
 
         # Evaluate children
@@ -94,10 +100,15 @@ class NeutralEngine:
             # self.child_population[i].set_full_phenotype(phenotypes[i])
 
             same_phenotype_as_parent = (binarized_phenotype == self.init_solution.phenotype).all()
-            
+
             # Calculate parent signaling distance
             parent_id, parent = next(((i, sol) for i, sol in enumerate(self.parent_population) if sol.id == child.parent_id), None)
-            child.signaling_distance = np.sum(np.abs(parent_phenotypes[parent_id] - phenotypes[i]))
+            parent_phenotype_idx, parent_id = next(((i, parent_id) for i, parent_id in enumerate(parent_ids) if parent_id == child.parent_id), None)
+
+            # print(parent_id, parent_phenotype_idx)
+            
+
+            child.signaling_distance = np.sum(np.abs(parent_phenotypes[parent_phenotype_idx] - phenotypes[i]))
             child.full_signaling_distance = np.sum(np.abs(self.init_solution.full_phenotype - phenotypes[i]))
             
             if child.signaling_distance != 0 and same_phenotype_as_parent:
@@ -152,17 +163,20 @@ class NeutralEngine:
 
     def simulate_initial_genotype(self):
         init_phenotypes = self.experiment.make_seed_phenotypes(1)
+
         
         # Simulate the random children 
         phenotypes = simulate(
             np.array([self.init_genotype]), 
             self.experiment.n_layers, 
             self.init_solution.around_start, 
-            # self.init_solution.above_start, 
+            self.init_solution.above_start, 
             init_phenotypes, 
-            np.array([self.init_solution.below_map])) # ,
-            # np.array([self.init_solution.above_map])) # ,
+            self.experiment.below_map,
+            self.experiment.above_map) # ,
             # self.experiment.above_map)
+
+
         fitness_scores = self.experiment.evaluate_phenotypes(phenotypes)
         print(f'''
         Initial genotype fitness: {fitness_scores[0]}
