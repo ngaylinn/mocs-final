@@ -50,31 +50,55 @@ best = exp.best_solution()
 best.neutral_counter = 0
 print('best fitness: ', best.fitness)
 
-ne = NeutralEngine(exp, best, best.state_genotype)
 
-# Code
-ne.run(5)
 
-ne.pickle_ne('neutral_walker_Sep2.pkl')
+best.genotype_distance = 0
+ne = NeutralEngine(exp, best, best.state_genotype, mutate_layers=None)
+ne.run(10)
+
 
 ##### 
 
 signaling_dist, sig_sol = ne.longest_signaling_distance_from_original()
 neutral_walk_length, neutral_sol = ne.longest_neutral_walk_from_original()
+genotype_distance, genotype_sol = ne.longest_genotype_distance_from_original()
+
+'''
+# One parameter at a time
+original_values = {}
+param_data = {}
+random_nonzero_indices = np.transpose(np.nonzero(best.state_genotype))
+for i, indices in enumerate(random_nonzero_indices):
+    original_values[i] = genotype_sol.state_genotype[*indices]
+
+for mutate_param in range(23):
+    ne = NeutralEngine(exp, genotype_sol, genotype_sol.state_genotype, mutate_layers=None, mutate_param=mutate_param)
+    ne.run(3)
+    param_data[mutate_param] = ne.param_data
+param_data['original'] = original_values
+print(param_data.keys())
+print(len(param_data[0]))
+with open(f'nw_Sep7_diamond_l2_t0.pkl', 'wb') as pf:
+    pickle.dump(param_data, pf, protocol=pickle.HIGHEST_PROTOCOL)
+'''
+
+
 
 
 print('Longest signaling distance: ', signaling_dist, f' (neutral path length: {sig_sol.neutral_counter})')
 print('Longest neutral path: ', neutral_walk_length, f' (signaling distance: {neutral_sol.signaling_distance})')
+print('Longest genotype distance: ', genotype_distance, f' (genotype distance: {genotype_sol.genotype_distance})')
 
 phenotypes_max_signaling = simulate_one_individual(exp, sig_sol)
 phenotypes_orig = simulate_one_individual(exp, ne.init_solution)
 phenotypes_max_neutral_walk = simulate_one_individual(exp, neutral_sol)
-
+phenotypes_max_genotype_distance = simulate_one_individual(exp, genotype_sol)
 
 
 visualize_all_layers(phenotypes_orig[0], './neutral_walk/orig.gif', base_layer_idx=exp.base_layer)
 visualize_all_layers(phenotypes_max_signaling[0], './neutral_walk/max_signaling.gif', base_layer_idx=exp.base_layer)
 visualize_all_layers(phenotypes_max_neutral_walk[0], './neutral_walk/max_neutralwalk.gif', base_layer_idx=exp.base_layer)
+visualize_all_layers(phenotypes_max_genotype_distance[0], './neutral_walk/genotype_dist.gif', base_layer_idx=exp.base_layer)
 
 '''
 # frames = [5, 10, 25, 99]
