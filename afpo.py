@@ -31,6 +31,7 @@ class Solution:
         self.full_signaling_distance = None
         self.signaling_distance = None
         self.phenotype_distance = None
+        self.genotype_distance = None
         self.neutral_counter = 0
         self.fitness_history = []
         self.phenotype_history = []
@@ -39,11 +40,14 @@ class Solution:
         self.neutral_genotype_history = []
         self.randomize_genome()
 
-    def make_offspring(self, new_id, mutate_layers=None):
+    def make_offspring(self, new_id, mutate_layers=None, mutate_param=None):
         child = Solution(layers=self.layers, id=new_id, parent_id=self.id)
         child.state_genotype = self.state_genotype.copy()
         if mutate_layers is None:
-            child.mutate()
+            if mutate_param is None:
+                child.mutate()
+            else:
+                child.mutate_param(mutate_param)
         else:
             assert [l in range(self.n_layers) for l in mutate_layers]
             child.mutate_layers(mutate_layers)
@@ -71,6 +75,19 @@ class Solution:
 
     def get_fitness(self):
         return self.fitness
+
+    def track_mutation_info(self, layer, c):
+        below_range, around_range, above_range = self.get_layer_state_indices(layer)
+        if c in range(*below_range):
+            kind = 'below'
+        elif c in range(*around_range):
+            kind = 'around'
+        elif c in range(*above_range):
+            kind = 'above'
+        else:
+            kind = None
+        self.mutation_info = {'kind': kind, 'layer': layer, 'new_value': self.state_genotype[layer,c]}
+        
     
     def mutate_layers(self, layers):
         """
@@ -80,33 +97,30 @@ class Solution:
         random_nonzero_indices = np.transpose(np.nonzero(self.state_genotype[layer]))
         c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))][0]
         self.state_genotype[layer, c] = np.random.random() * 2 - 1
+        self.track_mutation_info(layer, c)
         
-        below_range, around_range, above_range = self.get_layer_state_indices(layer)
-        if c in range(*below_range):
-            kind = 'below'
-        elif c in range(*around_range):
-            kind = 'around'
-        elif c in range(*above_range):
-            kind = 'above'
-        else:
-            kind = None
-        self.mutation_info = {'kind': kind, 'layer': layer}
-        
+    def mutate_param(self, param_number):
+        '''
+        param_number - specifies which parameter in the genome
+        to mutate if the parameters were flattened into a 1d array
+        '''
+        # Get non-zero elements of genotype encoding
+        nonzero_indices = np.transpose(np.nonzero(self.state_genotype))
+        genotype_size = len(nonzero_indices)
+
+        # Make sure the "parameter number" 
+        assert param_number in range(genotype_size)
+
+        # Mutate that parameter randomly...
+        layer, c = nonzero_indices[param_number]
+        self.state_genotype[layer, c] = np.random.random() * 2 - 1
+        self.track_mutation_info(layer, c)
 
     def mutate(self):
         random_nonzero_indices = np.transpose(np.nonzero(self.state_genotype))
         layer, c = random_nonzero_indices[np.random.choice(len(random_nonzero_indices))]
         self.state_genotype[layer, c] = np.random.random() * 2 - 1
-        below_range, around_range, above_range = self.get_layer_state_indices(layer)
-        if c in range(*below_range):
-            kind = 'below'
-        elif c in range(*around_range):
-            kind = 'around'
-        elif c in range(*above_range):
-            kind = 'above'
-        else:
-            kind = None
-        self.mutation_info = {'layer': layer, 'kind': kind}
+        self.track_mutation_info(layer, c)
 
     def dominates(self, other):
         return all([self.age <= other.age, self.fitness <= other.fitness])

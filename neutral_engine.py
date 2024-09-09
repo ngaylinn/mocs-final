@@ -11,10 +11,11 @@ class NeutralEngine:
     along the neutral network of the phenotype. 
     - Does not need "fitness"
     """
-    def __init__(self, exp, init_solution, init_genotype, mutate_layers=None):
+    def __init__(self, exp, init_solution, init_genotype, mutate_layers=None, mutate_param=None):
         self.experiment = exp
         self.init_genotype = init_genotype
         self.mutate_layers = mutate_layers
+        self.mutate_param = mutate_param
 
         self.child_population = []
         self.parent_population = []
@@ -29,6 +30,8 @@ class NeutralEngine:
         # self.init_solution
         self.init_solution.state_genotype = self.init_genotype
         self.simulate_initial_genotype()
+
+        self.param_data = []
 
     def run(self, n_steps=10):
         self.init_pop()
@@ -47,7 +50,7 @@ class NeutralEngine:
     def init_pop(self):
         self.parent_population = [self.init_solution]
         for _ in range(self.pop_size):
-            sol = self.init_solution.make_offspring(self.get_available_id(), self.mutate_layers)
+            sol = self.init_solution.make_offspring(self.get_available_id(), self.mutate_layers, self.mutate_param)
             # print(np.sum(sol.state_genotype == self.init_solution.state_genotype), '/', np.prod(sol.state_genotype.shape))
             self.child_population.append(sol)
 
@@ -96,7 +99,7 @@ class NeutralEngine:
             binarized_phenotype = phenotypes[i, -5:, self.experiment.base_layer] > 0
             child.set_phenotype(binarized_phenotype)
             child.set_fitness(fitness_scores[i])
-
+            
             # self.child_population[i].set_full_phenotype(phenotypes[i])
 
             same_phenotype_as_parent = (binarized_phenotype == self.init_solution.phenotype).all()
@@ -105,20 +108,29 @@ class NeutralEngine:
             parent_id, parent = next(((i, sol) for i, sol in enumerate(self.parent_population) if sol.id == child.parent_id), None)
             parent_phenotype_idx, parent_id = next(((i, parent_id) for i, parent_id in enumerate(parent_ids) if parent_id == child.parent_id), None)
 
-            # print(parent_id, parent_phenotype_idx)
-            
-
             child.signaling_distance = np.sum(np.abs(parent_phenotypes[parent_phenotype_idx] - phenotypes[i]))
             child.full_signaling_distance = np.sum(np.abs(self.init_solution.full_phenotype - phenotypes[i]))
-            
-            if child.signaling_distance != 0 and same_phenotype_as_parent:
-                print(child.signaling_distance)
+            child.genotype_distance = np.sum(np.abs(self.init_solution.state_genotype - child.state_genotype))
+
+            # Track neutral mutations
+            if same_phenotype_as_parent:
                 child.neutral_counter += 1
                 neutral_signaling_children.append(child)
+                if child.signaling_distance == 0:
+                    # Dead parameter change. Literally zero change in expression.
+                    self.param_data.append((child.mutation_info['new_value'], 0))
+                else:
+                    # Neutral final phenotype
+                    self.param_data.append((child.mutation_info['new_value'], 1))
+            else:
+                # Deleterious
+                self.param_data.append((child.mutation_info['new_value'], 2))
 
+            # Track beneficial mutations
             if fitness_scores[i] < parent.fitness:
                 self.beneficial_solutions.append(child)
                 print('Beneficial improvement: ', self.init_solution.fitness, ' - ', fitness_scores[i], ' = ', self.init_solution.fitness - fitness_scores[i])
+                self.param_data.append((child.mutation_info['new_value'], 3))
             
         # Print stats
         print(f'Step {step}: ')
@@ -156,9 +168,10 @@ class NeutralEngine:
         print('Max neutral path length: ', max([p.neutral_counter for p in self.parent_population]))
         self.child_population = []
         for _ in range(self.pop_size):
-            rand_parent = np.random.randint(n)
-            parent = self.parent_population[rand_parent]
-            child = parent.make_offspring(self.get_available_id(), self.mutate_layers)
+            # rand_parent = np.random.randint(n)
+            # parent = self.parent_population[rand_parent]
+            parent = list(sorted(self.parent_population, key=lambda sol: sol.genotype_distance))[-1]
+            child = parent.make_offspring(self.get_available_id(), self.mutate_layers, self.mutate_param)
             self.child_population.append(child)
 
     def simulate_initial_genotype(self):
@@ -192,6 +205,9 @@ class NeutralEngine:
     def longest_neutral_walk_from_original(self):
         return max([(sol.neutral_counter, sol) for i, sol in enumerate(self.parent_population)])
 
+    def longest_genotype_distance_from_original(self):
+        return max([(sol.genotype_distance, sol) for i, sol in enumerate(self.parent_population)])
+
     def get_available_id(self):
         self.num_ids += 1
         return self.num_ids
@@ -199,3 +215,7 @@ class NeutralEngine:
     def pickle_ne(self, file_name):
         with open(file_name, 'wb') as pf:
             pickle.dump(self, pf, protocol=pickle.HIGHEST_PROTOCOL)
+
+    def pickle_param(self, file_name):
+        with open(file_name, 'wb') as pf:
+            pickle.dump(self.param_data, pf, protocol=pickle.HIGHEST_PROTOCOL)
