@@ -8,6 +8,7 @@ import argparse
 import numpy as np
 
 from afpo import AgeFitnessPareto
+from hillclimber import HillClimber
 from simulation import visualize
 
 # Parse command line arguments
@@ -43,10 +44,10 @@ def main():
         n_trials = arm_parameters['num_trials']
         for trial in range(n_trials):
             print(f'==== Arm {arm}: Trial {trial+1}/{n_trials} ====')
-            single_run = AgeFitnessPareto(arm_parameters)
+            single_run = HillClimber(arm_parameters)
             best = single_run.evolve()
 
-            single_run.pickle_afpo(f'./experiments/{args.name}/{arm}/{arm}_t{trial}.pkl')
+            single_run.pickle_hc(f'./experiments/{args.name}/{arm}/{arm}_t{trial}.pkl')
 
 if __name__ == '__main__':
     main()
