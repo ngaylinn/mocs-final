@@ -400,13 +400,13 @@ if __name__ == '__main__':
     noise = generate_noise_knockout(n_timesteps, n_layers, WORLD_SIZE, knockouts)
     exp_best_phenotype_noise = simulate_one_individual_noisy(exp, best, noise)
 
-    visualize_all_layers_timestep(exp_best_phenotype_noise, f'./poke_recovery/timestep{timestep_1-1}.png', timestep=timestep_1-1)
-    visualize_all_layers_timestep(exp_best_phenotype_noise, f'./poke_recovery/timestep{timestep_2-1}.png', timestep=timestep_2-1)
+    visualize_all_layers_timestep(exp_best_phenotype_noise, f'./vis/poke_recovery/timestep{timestep_1-1}.png', timestep=timestep_1-1)
+    visualize_all_layers_timestep(exp_best_phenotype_noise, f'./vis/poke_recovery/timestep{timestep_2-1}.png', timestep=timestep_2-1)
     for i in range(14):
-        visualize_all_layers_timestep(exp_best_phenotype_noise, f'./poke_recovery/timestep{timestep_1+i}.png', timestep=timestep_1+i)
-        visualize_all_layers_timestep(exp_best_phenotype_noise, f'./poke_recovery/timestep{timestep_2+i}.png', timestep=timestep_2+i)
+        visualize_all_layers_timestep(exp_best_phenotype_noise, f'./vis/poke_recovery/timestep{timestep_1+i}.png', timestep=timestep_1+i)
+        visualize_all_layers_timestep(exp_best_phenotype_noise, f'./vis/poke_recovery/timestep{timestep_2+i}.png', timestep=timestep_2+i)
 
     # print(sum(exp_best_phenotype[-1, 3] > 0))
-    visualize_all_layers(exp_best_phenotype, 'homeostatter.gif', base_layer_idx=exp.base_layer)
-    visualize_all_layers(exp_best_phenotype_noise, 'homeostatter_noise.gif', base_layer_idx=exp.base_layer)
+    visualize_all_layers(exp_best_phenotype, './vis/homeostatter.gif', base_layer_idx=exp.base_layer)
+    visualize_all_layers(exp_best_phenotype_noise, './vis/homeostatter_noise.gif', base_layer_idx=exp.base_layer)
 
