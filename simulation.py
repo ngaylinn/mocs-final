@@ -176,7 +176,18 @@ def update_cell(num_layers, layer, phenotypes, state_genotypes, around_start, ab
         signal_sum = around_signal_sum + down_signal_sum + up_signal_sum #  + up_signal_sum
 
         phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
-        
+
+@cuda.jit
+def update_cell_no_noise(num_layers, layer, phenotypes, state_genotypes, around_start, above_start, pop_idx, step, row, col, above_map, below_map):
+    """Compute the next state for a single cell in layer0 from prev states."""
+    # Calculate the weighted sum of all neighbors.
+    down_signal_sum = look_down(layer, phenotypes, state_genotypes, 0, pop_idx, step, row, col, below_map) # Should return 0 for L=0
+    around_signal_sum = look_around(layer, phenotypes, state_genotypes, around_start, pop_idx, step, row, col)
+    up_signal_sum = look_up(num_layers, layer, phenotypes, state_genotypes, above_start, pop_idx, step, row, col, above_map)
+
+    signal_sum = around_signal_sum + down_signal_sum + up_signal_sum #  + up_signal_sum
+
+    phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
 
 # Max registers can be tuned per device. 64 is the most my laptop can handle.
 @cuda.jit(max_registers=64)
@@ -196,6 +207,27 @@ def simulation_kernel(state_genotypes, phenotypes, num_layers, around_start, abo
             # Update the state in every layer this individual uses.
             for layer in range(0, num_layers):
                 update_cell(num_layers, layer, phenotypes, state_genotypes, around_start, above_start, pop_idx, step, row, col, above_map, below_map, noise)
+        # Make sure all threads have finished computing this step before going
+        # on to the next one.
+        cuda.syncthreads()
+
+@cuda.jit(max_registers=64)
+def simulation_kernel_no_noise(state_genotypes, phenotypes, num_layers, around_start, above_start, above_map, below_map):
+    """Compute and record the full development process of a population."""
+    # Compute indices for this thread.
+    pop_idx = cuda.blockIdx.x
+    row = cuda.threadIdx.x
+    start_col = cuda.threadIdx.y * COLS_PER_THREAD
+
+    # For each step in the simulation (state at step 0 is pre-populated by the
+    # caller)...
+    for step in range(1, NUM_STEPS):
+        # This thread will compute COLS_PER_THREAD contiguous cells from row,
+        # starting at start_col.
+        for col in range(start_col, start_col + COLS_PER_THREAD):
+            # Update the state in every layer this individual uses.
+            for layer in range(0, num_layers):
+                update_cell_no_noise(num_layers, layer, phenotypes, state_genotypes, around_start, above_start, pop_idx, step, row, col, above_map, below_map)
         # Make sure all threads have finished computing this step before going
         # on to the next one.
         cuda.syncthreads()
@@ -227,34 +259,12 @@ def check_granularity(g, image):
         return False
     # return np.array_equal(image, scaled_up)
 
-
-def simulate(state_genotypes, num_layers, around_start, above_start, phenotypes, below_map, above_map, noise):
-    """Simulate genotypes and return phenotype videos."""
-
-    # Infer population size from genotypes
+def run_sim_noise(state_genotypes, num_layers, around_start, above_start, phenotypes, below_map, above_map, noise):
+    """
+    Run the simulation with non-zero noise.
+    """
     pop_size = state_genotypes.shape[0]
-
-    # Each individual has a genotype that consists of an activation function
-    # and a set of neighbor weights for each layer in the hierarchical CA.
-
-    # assert growth_genotypes.shape == (pop_size, num_layers, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS)
     
-    # assert genotypes.dtype == np.uint8
-
-    # Each individual is configured to have 0, 1, or 2 extra layers. This way,
-    # we can simulate individuals from control and experiment in the same
-    # batch. Individuals with fewer layers should complete faster. That could
-    # hurt performance, but shouldn't because each individual is handled by
-    # MAX_THREADS_PER_BLOCK threads, which should mean that whole warps fall
-    # out of the computation together.
-    assert type(num_layers) is int
-    assert num_layers in range(1, NUM_LAYERS + 1)
-
-    assert phenotypes.shape == (
-        pop_size, NUM_STEPS, num_layers, WORLD_SIZE, WORLD_SIZE)
-    assert above_map.shape == (num_layers, 3)
-    assert below_map.shape == (num_layers, 4, 3)
-
     # Copy input data from host memory to device memory.
     d_phenotypes = cuda.to_device(phenotypes)
     d_state_genotypes = cuda.to_device(state_genotypes)
@@ -292,6 +302,76 @@ def simulate(state_genotypes, num_layers, around_start, above_start, phenotypes,
 
     return phenotypes
 
+def run_sim_no_noise(state_genotypes, num_layers, around_start, above_start, phenotypes, below_map, above_map):
+    """
+    Run the simulation with no noise.
+    """
+    pop_size = state_genotypes.shape[0]
+
+    # Copy input data from host memory to device memory.
+    d_phenotypes = cuda.to_device(phenotypes)
+    d_state_genotypes = cuda.to_device(state_genotypes)
+    d_below_map = cuda.to_device(below_map)
+    d_above_map = cuda.to_device(above_map)
+
+    # Actually run the simulation for all individuals in parallel on the GPU.
+    simulation_kernel_no_noise[
+        # Each grid contains one block per organism.
+        (pop_size,),
+        # Organize threads into two dimensions. Each thread computes
+        # COLS_PER_THREAD cells in the CA. The X dimension is the row within
+        # the CA world to compute, and the Y dimension is multiplied by
+        # COLS_PER_THREAD to find the first column to start from.
+        (WORLD_SIZE, COL_BATCH_SIZE)
+    ](d_state_genotypes, d_phenotypes, num_layers, around_start, above_start, d_above_map, d_below_map)
+
+    # Copy output data from device memory to host memory.
+    phenotypes = d_phenotypes.copy_to_host()
+        
+    # Layer1 in all phenotypes from all steps of the simulation has a
+    # granularity of 2x2.
+    if phenotypes.shape[2] > 1:
+        assert all(check_granularity(2, p)
+                for p in np.reshape(
+                    phenotypes[:, :, 1], (-1, WORLD_SIZE, WORLD_SIZE))) 
+
+    # Layer2 in all phenotypes from all steps of the simulation has a
+    # granularity of 4x4.
+    if phenotypes.shape[2] > 2:
+        assert all(check_granularity(4, p)
+                for p in np.reshape(
+                    phenotypes[:, :, 2], (-1, WORLD_SIZE, WORLD_SIZE)))
+
+    return phenotypes
+    
+
+def simulate(state_genotypes, num_layers, around_start, above_start, phenotypes, below_map, above_map, noise=None):
+    """Simulate genotypes and return phenotype videos."""
+
+    # Infer population size from genotypes
+    pop_size = state_genotypes.shape[0]
+
+    # Each individual has a genotype that consists of an activation function
+    # and a set of neighbor weights for each layer in the hierarchical CA.
+
+    # Each individual is configured to have 0, 1, or 2 extra layers. This way,
+    # we can simulate individuals from control and experiment in the same
+    # batch. Individuals with fewer layers should complete faster. That could
+    # hurt performance, but shouldn't because each individual is handled by
+    # MAX_THREADS_PER_BLOCK threads, which should mean that whole warps fall
+    # out of the computation together.
+    assert type(num_layers) is int
+    assert num_layers in range(1, NUM_LAYERS + 1)
+
+    assert phenotypes.shape == (
+        pop_size, NUM_STEPS, num_layers, WORLD_SIZE, WORLD_SIZE)
+    assert above_map.shape == (num_layers, 3)
+    assert below_map.shape == (num_layers, 4, 3)
+
+    if noise is not None:
+        return run_sim_noise(state_genotypes, num_layers, around_start, above_start, phenotypes, below_map, above_map, noise)
+    else:
+        return run_sim_no_noise(state_genotypes, num_layers, around_start, above_start, phenotypes, below_map, above_map)
 
 def make_seed_phenotypes(pop_size, n_layers=4):
     """Starting phenotypes to use by default (one ALIVE cell in middle)."""

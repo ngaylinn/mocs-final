@@ -48,7 +48,7 @@ def main():
         else: # Run locally
             for trial in range(n_trials):
                 print(f'==== Arm {arm}: Trial {trial+1}/{n_trials} ====')
-                os.system(f'python run_trial.py -O {args.exp_file} {args.name} {arm} {trial}')
+                os.system(f'python3 -O run_trial.py {args.exp_file} {args.name} {arm} {trial}')
 
 if __name__ == '__main__':
     main()
