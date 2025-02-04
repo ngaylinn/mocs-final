@@ -134,10 +134,12 @@ class NeutralEngine:
             
         # Print stats
         print(f'Step {step}: ')
-        print(np.sum(fitness_scores <= self.init_solution.fitness), ' neutral mutations')
-        print(np.sum(fitness_scores < self.init_solution.fitness), ' beneficial mutations')
-        print(len(neutral_signaling_children), ' neutral w/ different signaling')
-        print(len(self.beneficial_solutions), ' total beneficial solutions found')
+        # print(np.sum(fitness_scores <= self.init_solution.fitness), ' neutral mutations')
+        # print(np.sum(fitness_scores < self.init_solution.fitness), ' beneficial mutations')
+        # print(len(neutral_signaling_children), ' neutral w/ different signaling')
+        # print(len(self.beneficial_solutions), ' total beneficial solutions found')
+
+        self.neutral_percent = len(neutral_signaling_children) / len(self.child_population)
 
         # if len(self.beneficial_solutions) > 0:
         #     self.pickle_ne('./Apr14_beneficial.pkl')
