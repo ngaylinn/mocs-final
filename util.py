@@ -1,5 +1,8 @@
 import numpy as np
 
+from optimizers.afpo import Solution
+from simulation import simulate, make_seed_phenotypes, make_seed_phenotypes_layer
+
 def create_complex(N):
     if N <= 6 or N % 2 != 0:
         raise ValueError("N must be an even number greater than 6")
@@ -96,3 +99,39 @@ def create_plus(N):
     array = np.repeat(np.repeat(array, 2, axis=0), 2, axis=1)
 
     return array
+
+def simulate_one_individual(afpo, solution : Solution):
+    init_phenotypes = make_seed_phenotypes_layer(1, n_layers=afpo.n_layers, base_layer=afpo.base_layer)
+    print(solution.n_layers)
+
+    phenotypes = simulate(
+            np.array([solution.state_genotype]),
+            solution.n_layers,  
+            solution.around_start, 
+            solution.above_start, 
+            phenotypes=init_phenotypes,
+            below_map=afpo.below_map,
+            above_map=afpo.above_map)
+    
+    return phenotypes[0]
+
+def simulate_n_individuals(solutions):
+    n = len(solutions)
+    n_layers = solutions[0].n_layers
+    base_layer = solutions[0].base_layer
+    around_start = solutions[0].around_start
+    above_start = solutions[0].above_start
+    init_phenotypes = make_seed_phenotypes(n, n_layers)
+
+    phenotypes = simulate(
+            np.array([soln.growth_genotype for soln in solutions]), 
+            np.array([soln.state_genotype for soln in solutions]), 
+            n_layers, 
+            base_layer,  
+            around_start, 
+            above_start, 
+            True, 
+            init_phenotypes, 
+            0) # sigmoid default currently 
+    
+    return phenotypes[:,-1,:,:,:]

@@ -10,65 +10,7 @@ from PIL import ImageOps, ImageEnhance
 
 from optimizers.afpo import Solution, AgeFitnessPareto, activation2int
 from simulation import simulate, make_seed_phenotypes, DEAD, ALIVE, make_seed_phenotypes_layer
-
-# def visualize_selection_layer_over_time(phenotype, filename, base_layer_idx):
-#     # Frame indices
-#     frames = [0,5,10,50,99]
-
-#     n_layers, l, w = phenotype[frames[0]].shape
-    
-#     # Calculate the total width for the new image
-#     total_width = w * len(frames)
-
-#     # Create a new image with the calculated total width
-#     combined_image = Image.new('RGBA', (total_width, l))
-    
-#     for i, frame_data in enumerate(phenotype[frames]):
-#         base_layer = frame_data[base_layer_idx]
-
-#         base = np.array(
-#             np.bitwise_or(
-#                 (base_layer != DEAD) * 0xffffffff,   # DEAD cells are black
-#                 (base_layer == DEAD) * 0xff000000), # ALIVE cells are white
-#             dtype=np.uint32)
-
-#         # Base layer first
-#         base_img = Image.fromarray(base, mode='RGBA')
-#         combined_image.paste(base_img, (i*w, 0))
-
-#     combined_image.save(filename)
-
-# def visualize_selection_layer_over_time(phenotype, filename, base_layer_idx):
-#     # Frame indices
-#     frames = [0, 5, 10, 50, 99]
-
-#     n_layers, l, w = phenotype[frames[0]].shape
-
-#     # Set the desired gap size between panels (you can adjust this value)
-#     gap_size = 5  # Adjust this value as needed
-
-#     # Calculate the total width for the new image with gaps
-#     total_width = w * len(frames) + gap_size * (len(frames) - 1) + len(frames)
-#     total_height = l + gap_size * 2 + len(frames)
-
-#     # Create a new image with the calculated total width
-#     combined_image = Image.new('RGBA', (total_width, total_height))
-
-#     for i, frame_data in enumerate(phenotype[frames]):
-#         base_layer = frame_data[base_layer_idx]
-
-#         base = np.array(
-#             np.bitwise_or(
-#                 (base_layer != DEAD) * 0xffffffff,   # DEAD cells are black
-#                 (base_layer == DEAD) * 0xff008000), # ALIVE cells are white
-#             dtype=np.uint32)
-
-#         # Base layer first
-#         base_img = Image.fromarray(base, mode='RGBA')
-#         base_img = ImageOps.expand(base_img, border=1, fill=(0, 0, 0, 255))
-#         combined_image.paste(base_img, (i * (w + gap_size), gap_size))
-
-#     combined_image.save(filename)
+from util import simulate_one_individual, simulate_n_individuals
 
 color_dict = {
     'green': {
@@ -214,58 +156,7 @@ def visualize_layers_and_selection_over_time(phenotype, filename, base_layer_idx
             combined_image.paste(img_enhanced, (i * (w + gap_size), gap_size + ( n_layers-layer_idx) * (l + gap_size)))
 
     combined_image.save(filename)
-# def simulate_one_individual(solution : Solution):
-#     init_phenotypes = make_seed_phenotypes(1, n_layers=solution.n_layers)
-#     print(solution.n_layers)
 
-#     phenotypes = simulate(
-#             np.array([solution.growth_genotype]), 
-#             np.array([solution.state_genotype]), 
-#             solution.n_layers, 
-#             solution.base_layer,  
-#             solution.around_start, 
-#             solution.above_start, 
-#             True, 
-#             init_phenotypes, 
-#             0) # sigmoid default currently 
-    
-#     return phenotypes[0]
-
-def simulate_one_individual(afpo, solution : Solution):
-    init_phenotypes = make_seed_phenotypes_layer(1, n_layers=afpo.n_layers, base_layer=afpo.base_layer)
-    print(solution.n_layers)
-
-    phenotypes = simulate(
-            np.array([solution.state_genotype]),
-            solution.n_layers,  
-            solution.around_start, 
-            solution.above_start, 
-            phenotypes=init_phenotypes,
-            below_map=afpo.below_map,
-            above_map=afpo.above_map)
-    
-    return phenotypes[0]
-
-def simulate_n_individuals(solutions):
-    n = len(solutions)
-    n_layers = solutions[0].n_layers
-    base_layer = solutions[0].base_layer
-    around_start = solutions[0].around_start
-    above_start = solutions[0].above_start
-    init_phenotypes = make_seed_phenotypes(n, n_layers)
-
-    phenotypes = simulate(
-            np.array([soln.growth_genotype for soln in solutions]), 
-            np.array([soln.state_genotype for soln in solutions]), 
-            n_layers, 
-            base_layer,  
-            around_start, 
-            above_start, 
-            True, 
-            init_phenotypes, 
-            0) # sigmoid default currently 
-    
-    return phenotypes[:,-1,:,:,:]
 
 def visualize_all_layers(phenotype, filename, base_layer_idx=0):
     def make_frame(frame_data):
@@ -420,8 +311,6 @@ if __name__ == '__main__':
 
     # print(sum(exp_best_phenotype[-1, 3] > 0))
     visualize_all_layers(exp_best_phenotype, 'trial.gif', base_layer_idx=exp.base_layer)
-
-
 
     print('hello?')
     
