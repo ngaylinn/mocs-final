@@ -8,6 +8,7 @@ import argparse
 import numpy as np
 
 from afpo import AgeFitnessPareto
+from hillclimber import HillClimber
 from simulation import visualize
 
 # Parse command line arguments
@@ -39,7 +40,13 @@ def main():
     if not os.path.exists(f'./experiments/{args.exp_name}/{args.arm_name}'):
         os.system(f'mkdir ./experiments/{args.exp_name}/{args.arm_name}')
 
-    single_run = AgeFitnessPareto(arm_parameters)
+    if arm_parameters['optimizer'] == 'afpo':
+        single_run = AgeFitnessPareto(arm_parameters)
+    elif arm_parameters['optimizer'] == 'hillclimber':
+        single_run = HillClimber(arm_parameters)
+    else:
+        raise ValueError(f'Invalid optimizer: {arm_parameters["optimizer"]}')
+
     best = single_run.evolve()
 
     single_run.pickle_afpo(f'./experiments/{args.exp_name}/{args.arm_name}/{args.arm_name}_t{args.trial}.pkl')

@@ -7,7 +7,6 @@ import argparse
 
 import numpy as np
 
-from afpo import AgeFitnessPareto
 from simulation import visualize
 
 # Parse command line arguments
@@ -38,15 +37,11 @@ def main():
             os.system(f'mkdir ./experiments/{args.name}/{arm}')
 
         arm_parameters = exp_arms[arm]
-        optimizer = arm_parameters['optimizer']
 
         # Run a few instances of each
         n_trials = arm_parameters['num_trials']
         for trial in range(n_trials):
-            if optimizer == 'afpo':
-                os.system(f'sbatch vacc_submit_arm.sh {args.exp_file} {args.name} {arm} {trial}')
-            elif optimizer == 'hillclimber':
-                os.system(f'sbatch vacc_submit_arm_hc.sh {args.exp_file} {args.name} {arm} {trial}')
+            os.system(f'sbatch vacc_submit_arm.sh {args.exp_file} {args.name} {arm} {trial}')
 
 
 if __name__ == '__main__':
