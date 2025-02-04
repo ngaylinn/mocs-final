@@ -8,7 +8,7 @@ import numpy as np
 from PIL import Image
 from PIL import ImageOps, ImageEnhance
 
-from afpo import Solution, AgeFitnessPareto, activation2int
+from optimizers.afpo import Solution, AgeFitnessPareto, activation2int
 from simulation import simulate, make_seed_phenotypes, DEAD, ALIVE, make_seed_phenotypes_layer, NUM_STEPS, WORLD_SIZE
 
 color_dict = {

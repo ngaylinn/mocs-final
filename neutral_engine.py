@@ -1,9 +1,10 @@
-from simulation import simulate
-from afpo import Solution
 import numpy as np
 import tracemalloc
 import pickle
 import random
+
+from simulation import simulate
+from optimizers.afpo import Solution
 
 class NeutralEngine:
     """

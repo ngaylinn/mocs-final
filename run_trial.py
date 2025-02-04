@@ -7,8 +7,8 @@ import argparse
 
 import numpy as np
 
-from afpo import AgeFitnessPareto
-from hillclimber import HillClimber
+from optimizers.afpo import AgeFitnessPareto
+from optimizers.hillclimber import HillClimber
 from simulation import visualize
 
 # Parse command line arguments

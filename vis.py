@@ -8,7 +8,7 @@ import numpy as np
 from PIL import Image
 from PIL import ImageOps, ImageEnhance
 
-from afpo import Solution, AgeFitnessPareto, activation2int
+from optimizers.afpo import Solution, AgeFitnessPareto, activation2int
 from simulation import simulate, make_seed_phenotypes, DEAD, ALIVE, make_seed_phenotypes_layer
 
 # def visualize_selection_layer_over_time(phenotype, filename, base_layer_idx):
