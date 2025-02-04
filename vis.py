@@ -8,7 +8,8 @@ import numpy as np
 from PIL import Image
 from PIL import ImageOps, ImageEnhance
 
-from optimizers.afpo import Solution, AgeFitnessPareto, activation2int
+from optimizers.afpo import AgeFitnessPareto
+from solution import Solution, activation2int
 from simulation import simulate, make_seed_phenotypes, DEAD, ALIVE, make_seed_phenotypes_layer
 from util import simulate_one_individual, simulate_n_individuals
 

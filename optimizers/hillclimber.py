@@ -6,15 +6,9 @@ import tracemalloc
 
 import numpy as np
 
-from optimizers.afpo import Solution
+from solution import Solution, activation2int
 from simulation import simulate, get_layer_mask, DEAD, ALIVE, WORLD_SIZE, NUM_STEPS, NUM_LAYERS, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS, ACTIVATION_SIGMOID, ACTIVATION_RELU, ACTIVATION_TANH
 from util import create_hollow_circle, create_square, create_diamond, create_plus, create_complex
-
-activation2int = {
-    'sigmoid': ACTIVATION_SIGMOID,
-    'tanh': ACTIVATION_TANH,
-    'relu': ACTIVATION_RELU
-}
 
 class HillClimber:
     def __init__(self, experiment_constants, exp_directory='.'):
