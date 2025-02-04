@@ -15,6 +15,7 @@ from simulation import visualize
 parser = argparse.ArgumentParser()
 parser.add_argument('exp_file', type=str, help='Experiment file')
 parser.add_argument('name', type=str, help='Name of experiment')
+parser.add_argument('--vacc', action='store_true', help='Run experiment on VACC')
 args = parser.parse_args()
 
 # Read the experiment file into exp_arms variable
@@ -39,15 +40,15 @@ def main():
             os.system(f'mkdir ./experiments/{args.name}/{arm}')
 
         arm_parameters = exp_arms[arm]
-
-        # Run a few instances of each
         n_trials = arm_parameters['num_trials']
-        for trial in range(n_trials):
-            print(f'==== Arm {arm}: Trial {trial+1}/{n_trials} ====')
-            single_run = HillClimber(arm_parameters)
-            best = single_run.evolve()
 
-            single_run.pickle_hc(f'./experiments/{args.name}/{arm}/{arm}_t{trial}.pkl')
+        if args.vacc: # Run on VACC 
+            for trial in range(n_trials):
+                os.system(f'sbatch vacc_submit_arm.sh {args.exp_file} {args.name} {arm} {trial}')
+        else: # Run locally
+            for trial in range(n_trials):
+                print(f'==== Arm {arm}: Trial {trial+1}/{n_trials} ====')
+                os.system(f'python run_trial.py -O {args.exp_file} {args.name} {arm} {trial}')
 
 if __name__ == '__main__':
     main()
