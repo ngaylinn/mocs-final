@@ -333,7 +333,7 @@ def visualize_all_layers_timestep(phenotype, filename, timestep):
     
     frame.save(filename)
 
-def generate_knockouts_radiation(T,L,N, phenotype, timestep_range, layers, p):
+def generate_knockouts_radiation(T,L,N, timestep_range, layers, p):
     noise = generate_empty_noise(T,L,N)
 
     for timestep in range(*timestep_range):
