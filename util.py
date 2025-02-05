@@ -1,6 +1,6 @@
 import numpy as np
 
-from optimizers.afpo import Solution
+from solution import Solution
 from simulation import simulate, make_seed_phenotypes, make_seed_phenotypes_layer
 
 def create_complex(N):
@@ -101,9 +101,10 @@ def create_plus(N):
     return array
 
 def simulate_one_individual(afpo, solution : Solution):
-    init_phenotypes = make_seed_phenotypes_layer(1, n_layers=afpo.n_layers, base_layer=afpo.base_layer)
-    print(solution.n_layers)
-
+    init_phenotypes = make_seed_phenotypes_layer(1, 
+                                                n_layers=afpo.n_layers, 
+                                                base_layer=afpo.base_layer)
+    print(init_phenotypes.shape)
     phenotypes = simulate(
             np.array([solution.state_genotype]),
             solution.n_layers,  

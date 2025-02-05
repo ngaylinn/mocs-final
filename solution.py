@@ -1,6 +1,8 @@
 import functools
 import numpy as np
 
+from simulation import ACTIVATION_SIGMOID, ACTIVATION_TANH, ACTIVATION_RELU
+
 activation2int = {
     'sigmoid': ACTIVATION_SIGMOID,
     'tanh': ACTIVATION_TANH,
