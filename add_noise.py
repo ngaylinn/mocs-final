@@ -124,7 +124,6 @@ def visualize_layers_and_selection_over_time(phenotype, filename, base_layer_idx
 
 def simulate_one_individual(afpo, solution : Solution):
     init_phenotypes = make_seed_phenotypes_layer(1, n_layers=afpo.n_layers, base_layer=afpo.base_layer)
-    print(solution.n_layers)
 
     phenotypes = simulate(
             np.array([solution.state_genotype]),
@@ -341,14 +340,12 @@ def generate_knockouts_radiation(T,L,N, timestep_range, layers, p):
             for r in range(WORLD_SIZE):
                 for c in range(WORLD_SIZE):
                     if np.random.random() < p:
-                        noise[timestep, l, r, c] = 1
+                        noise[timestep, l, r, c] = 0
 
     return noise
-          
-    
 
 def generate_empty_noise(T, L, N):
-    return np.zeros((T, L, N, N))
+    return np.ones((T, L, N, N))
 
 def generate_noise_knockout(T, L, N, knockout_locations):
     """
@@ -357,57 +354,62 @@ def generate_noise_knockout(T, L, N, knockout_locations):
     """
     noise = generate_empty_noise(T,L,N)
     for (t, l, r, c) in knockout_locations: 
-        noise[t,l,r,c] = 1
+        noise[t,l,r,c] = 0
 
     return noise
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--exp', type=str, default=None)
-args = parser.parse_args()
+def generate_gaussian_noise(T, L, N, sigma):
+    # noise = generate_empty_noise(T,L,N)
+    noise = np.random.normal(1, sigma, (T, L, N, N))
+    return noise
 
-experiment_pkl = args.exp
+# parser = argparse.ArgumentParser()
+# parser.add_argument('--exp', type=str, default=None)
+# args = parser.parse_args()
 
-if __name__ == '__main__':
-    with open(experiment_pkl, 'rb') as pf:
-        exp = pickle.load(pf)
+# experiment_pkl = args.exp
 
-    best = exp.best_solution()
-    print('Fitness: ', best.fitness)
-    print(best.state_genotype)
+# if __name__ == '__main__':
+#     with open(experiment_pkl, 'rb') as pf:
+#         exp = pickle.load(pf)
 
-    n_timesteps = NUM_STEPS
-    n_layers = best.n_layers
+#     best = exp.best_solution()
+#     print('Fitness: ', best.fitness)
+#     print(best.state_genotype)
 
-    '''
-    Generate the normal NCA (w/ no noise)
-    '''
-    empty_noise = generate_empty_noise(n_timesteps, n_layers, WORLD_SIZE)
-    exp_best_phenotype = simulate_one_individual_noisy(exp, best, empty_noise)
+#     n_timesteps = NUM_STEPS
+#     n_layers = best.n_layers
 
-    '''
-    Add noise to the model!
-    '''
-    # noise = generate_knockouts_radiation(n_timesteps, n_layers, WORLD_SIZE, exp_best_phenotype, timestep_range=(25,75), layers=[0], p=0.001)
+#     '''
+#     Generate the normal NCA (w/ no noise)
+#     '''
+#     empty_noise = generate_empty_noise(n_timesteps, n_layers, WORLD_SIZE)
+#     exp_best_phenotype = simulate_one_individual_noisy(exp, best, empty_noise)
 
-    timestep_1 = 50
-    timestep_2 = 80
-    poke_x, poke_y = 43, 27
-    knockouts = [(timestep_1, 0, poke_x, poke_y), (timestep_2, 0, poke_x, poke_y)]
-    knockouts = knockouts + [(timestep_1, 0, poke_x+1, poke_y), (timestep_1, 0, poke_x-1, poke_y),(timestep_1, 0, poke_x, poke_y+1), (timestep_1, 0, poke_x, poke_y-1)]
-    knockouts = knockouts + [(timestep_2, 0, poke_x+1, poke_y), (timestep_2, 0, poke_x-1, poke_y),(timestep_2, 0, poke_x, poke_y+1), (timestep_2, 0, poke_x, poke_y-1)]
-    knockouts = knockouts + [(timestep_1, 0, poke_x+1, poke_y+1), (timestep_1, 0, poke_x-1, poke_y-1),(timestep_1, 0, poke_x-1, poke_y+1), (timestep_1, 0, poke_x+1, poke_y-1)]
-    knockouts = knockouts + [(timestep_2, 0, poke_x+1, poke_y+1), (timestep_2, 0, poke_x-1, poke_y-1),(timestep_2, 0, poke_x-1, poke_y+1), (timestep_2, 0, poke_x+1, poke_y-1)]
+#     '''
+#     Add noise to the model!
+#     '''
+#     # noise = generate_knockouts_radiation(n_timesteps, n_layers, WORLD_SIZE, exp_best_phenotype, timestep_range=(25,75), layers=[0], p=0.001)
 
-    noise = generate_noise_knockout(n_timesteps, n_layers, WORLD_SIZE, knockouts)
-    exp_best_phenotype_noise = simulate_one_individual_noisy(exp, best, noise)
+#     timestep_1 = 50
+#     timestep_2 = 80
+#     poke_x, poke_y = 43, 27
+#     knockouts = [(timestep_1, 0, poke_x, poke_y), (timestep_2, 0, poke_x, poke_y)]
+#     knockouts = knockouts + [(timestep_1, 0, poke_x+1, poke_y), (timestep_1, 0, poke_x-1, poke_y),(timestep_1, 0, poke_x, poke_y+1), (timestep_1, 0, poke_x, poke_y-1)]
+#     knockouts = knockouts + [(timestep_2, 0, poke_x+1, poke_y), (timestep_2, 0, poke_x-1, poke_y),(timestep_2, 0, poke_x, poke_y+1), (timestep_2, 0, poke_x, poke_y-1)]
+#     knockouts = knockouts + [(timestep_1, 0, poke_x+1, poke_y+1), (timestep_1, 0, poke_x-1, poke_y-1),(timestep_1, 0, poke_x-1, poke_y+1), (timestep_1, 0, poke_x+1, poke_y-1)]
+#     knockouts = knockouts + [(timestep_2, 0, poke_x+1, poke_y+1), (timestep_2, 0, poke_x-1, poke_y-1),(timestep_2, 0, poke_x-1, poke_y+1), (timestep_2, 0, poke_x+1, poke_y-1)]
 
-    visualize_all_layers_timestep(exp_best_phenotype_noise, f'./vis/poke_recovery/timestep{timestep_1-1}.png', timestep=timestep_1-1)
-    visualize_all_layers_timestep(exp_best_phenotype_noise, f'./vis/poke_recovery/timestep{timestep_2-1}.png', timestep=timestep_2-1)
-    for i in range(14):
-        visualize_all_layers_timestep(exp_best_phenotype_noise, f'./vis/poke_recovery/timestep{timestep_1+i}.png', timestep=timestep_1+i)
-        visualize_all_layers_timestep(exp_best_phenotype_noise, f'./vis/poke_recovery/timestep{timestep_2+i}.png', timestep=timestep_2+i)
+#     noise = generate_noise_knockout(n_timesteps, n_layers, WORLD_SIZE, knockouts)
+#     exp_best_phenotype_noise = simulate_one_individual_noisy(exp, best, noise)
 
-    # print(sum(exp_best_phenotype[-1, 3] > 0))
-    visualize_all_layers(exp_best_phenotype, './vis/homeostatter.gif', base_layer_idx=exp.base_layer)
-    visualize_all_layers(exp_best_phenotype_noise, './vis/homeostatter_noise.gif', base_layer_idx=exp.base_layer)
+#     visualize_all_layers_timestep(exp_best_phenotype_noise, f'./vis/poke_recovery/timestep{timestep_1-1}.png', timestep=timestep_1-1)
+#     visualize_all_layers_timestep(exp_best_phenotype_noise, f'./vis/poke_recovery/timestep{timestep_2-1}.png', timestep=timestep_2-1)
+#     for i in range(14):
+#         visualize_all_layers_timestep(exp_best_phenotype_noise, f'./vis/poke_recovery/timestep{timestep_1+i}.png', timestep=timestep_1+i)
+#         visualize_all_layers_timestep(exp_best_phenotype_noise, f'./vis/poke_recovery/timestep{timestep_2+i}.png', timestep=timestep_2+i)
+
+#     # print(sum(exp_best_phenotype[-1, 3] > 0))
+#     visualize_all_layers(exp_best_phenotype, './vis/homeostatter.gif', base_layer_idx=exp.base_layer)
+#     visualize_all_layers(exp_best_phenotype_noise, './vis/homeostatter_noise.gif', base_layer_idx=exp.base_layer)
 
