@@ -19,6 +19,7 @@ class Solution:
         self.base_layer = next((i for i, d in enumerate(self.layers) if d.get('base', False)), None)
         self.age = 0
         self.been_simulated = False
+        self.homeostatic = False
         self.fitness = None
         self.phenotype = None
         self.full_phenotype = None
@@ -64,6 +65,9 @@ class Solution:
 
     def set_simulated(self, new_simulated):
         self.been_simulated = new_simulated
+
+    def set_homeostatic(self, new_homeostatic):
+        self.homeostatic = new_homeostatic
 
     def set_fitness(self, fitness):
         self.fitness = fitness
