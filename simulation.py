@@ -165,17 +165,17 @@ def look_around(layer, phenotypes, genotypes, around_weights_start, pop_idx, ste
 def update_cell(num_layers, layer, phenotypes, state_genotypes, around_start, above_start, pop_idx, step, row, col, above_map, below_map, noise):
     """Compute the next state for a single cell in layer0 from prev states."""
     g = 1 << layer
-    if noise[step, layer, (row//g)*g, (col//g)*g] == 1:
-        phenotypes[pop_idx][step][layer][row][col] = DEAD
-    else: 
-        # Calculate the weighted sum of all neighbors.
-        down_signal_sum = look_down(layer, phenotypes, state_genotypes, 0, pop_idx, step, row, col, below_map) # Should return 0 for L=0
-        around_signal_sum = look_around(layer, phenotypes, state_genotypes, around_start, pop_idx, step, row, col)
-        up_signal_sum = look_up(num_layers, layer, phenotypes, state_genotypes, above_start, pop_idx, step, row, col, above_map)
+    # if noise[step, layer, (row//g)*g, (col//g)*g] == 1:
+    #     phenotypes[pop_idx][step][layer][row][col] = DEAD
+    # else: 
+    # Calculate the weighted sum of all neighbors.
+    down_signal_sum = look_down(layer, phenotypes, state_genotypes, 0, pop_idx, step, row, col, below_map) # Should return 0 for L=0
+    around_signal_sum = look_around(layer, phenotypes, state_genotypes, around_start, pop_idx, step, row, col)
+    up_signal_sum = look_up(num_layers, layer, phenotypes, state_genotypes, above_start, pop_idx, step, row, col, above_map)
 
-        signal_sum = around_signal_sum + down_signal_sum + up_signal_sum #  + up_signal_sum
+    signal_sum = around_signal_sum + down_signal_sum + up_signal_sum #  + up_signal_sum
 
-        phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
+    phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum) * noise[step, layer, (row//g)*g, (col//g)*g]
 
 @cuda.jit
 def update_cell_no_noise(num_layers, layer, phenotypes, state_genotypes, around_start, above_start, pop_idx, step, row, col, above_map, below_map):
