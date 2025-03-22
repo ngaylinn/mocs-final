@@ -88,7 +88,8 @@ class AgeFitnessPareto:
             if self.homeostasis_steps > 1:
                 # Check if the phenotype is the same for all homeostasis steps
                 if all([(phenotypes[i][j] == phenotypes[i][0]).all() for j in range(self.homeostasis_steps)]):
-                    self.population[idx].set_homeostatic(True)
+                    if fitness_scores[i] < 1000000:
+                        self.population[idx].set_homeostatic(True)
 
         mean_fitness = np.mean([sol.fitness for sol in self.population])
         print('Average fitness:', mean_fitness)
@@ -230,6 +231,10 @@ class AgeFitnessPareto:
             # Compare it to the target image, and sum up the deltas to get the
             # final fitness score (lower is better, 0 is a perfect score).
             fitness_scores[i] = np.sum(np.abs(target - phenotypes[i]))
+
+            # Select against all-dead or all-alive phenotypes
+            if (phenotypes[i] == 0).all() or (phenotypes[i] == 1).all():
+                fitness_scores[i] = 1000000
 
         return phenotypes, fitness_scores
 
