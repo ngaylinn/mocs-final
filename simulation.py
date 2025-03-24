@@ -137,27 +137,26 @@ def look_up(num_layers, layer, phenotypes, genotypes, up_weights_start, pop_idx,
 
 
 @cuda.jit
-def look_around(layer, phenotypes, genotypes, around_weights_start, pop_idx, step, row, col):
+def look_around(layer, phenotypes, genotypes, pop_idx, step, row, col):
     """Compute the weighted sum of this cell's neighbors in this layer."""
-    # The "granularity" of this layer. Layer0 == 1, layer1 == 2, layer2 == 4.
-    g = 1 << layer
-
-    weight_index = around_weights_start
+    weight_index = 0
     result = 0
     # Look at a Moore neighborhood around (row, col) in the current layer.
-    for r in range(row-g, row+g+1, g):
-        for c in range(col-g, col+g+1, g):
-            # Do wrap-around bounds checking. This may be inefficient, since
-            # we're doing extra modulus operations and working on
-            # non-contiguous memory may prevent coallesced reads. However, it's
-            # simple, and avoids complications when working with different
-            # granularities.
-            r = r % WORLD_SIZE
-            c = c % WORLD_SIZE
-            neighbor_state = phenotypes[pop_idx][step-1][layer][r][c]
-            weight = genotypes[pop_idx, layer][weight_index]
-            result += neighbor_state * weight
-            weight_index += 1
+    for l in range(0, NUM_LAYERS):
+        for r in range(row-1, row+2, 1):
+            for c in range(col-1, col+2, 1):
+                # Do wrap-around bounds checking. This may be inefficient, since
+                # we're doing extra modulus operations and working on
+                # non-contiguous memory may prevent coallesced reads. However, it's
+                # simple, and avoids complications when working with different
+                # granularities.
+                r = r % WORLD_SIZE
+                c = c % WORLD_SIZE
+                
+                neighbor_state = phenotypes[pop_idx][step-1][l][r][c]
+                weight = genotypes[pop_idx, layer][weight_index]
+                result += neighbor_state * weight
+                weight_index += 1
     return result
 
 
@@ -178,14 +177,10 @@ def update_cell(num_layers, layer, phenotypes, state_genotypes, around_start, ab
     phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum) * noise[step, layer, (row//g)*g, (col//g)*g]
 
 @cuda.jit
-def update_cell_no_noise(num_layers, layer, phenotypes, state_genotypes, around_start, above_start, pop_idx, step, row, col, above_map, below_map):
+def update_cell_no_noise(num_layers, layer, phenotypes, state_genotypes, pop_idx, step, row, col):
     """Compute the next state for a single cell in layer0 from prev states."""
     # Calculate the weighted sum of all neighbors.
-    down_signal_sum = look_down(layer, phenotypes, state_genotypes, 0, pop_idx, step, row, col, below_map) # Should return 0 for L=0
-    around_signal_sum = look_around(layer, phenotypes, state_genotypes, around_start, pop_idx, step, row, col)
-    up_signal_sum = look_up(num_layers, layer, phenotypes, state_genotypes, above_start, pop_idx, step, row, col, above_map)
-
-    signal_sum = around_signal_sum + down_signal_sum + up_signal_sum #  + up_signal_sum
+    signal_sum = look_around(layer, phenotypes, state_genotypes, pop_idx, step, row, col)
 
     phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
 
@@ -212,7 +207,7 @@ def simulation_kernel(state_genotypes, phenotypes, num_layers, around_start, abo
         cuda.syncthreads()
 
 @cuda.jit(max_registers=64)
-def simulation_kernel_no_noise(state_genotypes, phenotypes, num_layers, around_start, above_start, above_map, below_map):
+def simulation_kernel_no_noise(state_genotypes, phenotypes, num_layers):
     """Compute and record the full development process of a population."""
     # Compute indices for this thread.
     pop_idx = cuda.blockIdx.x
@@ -227,7 +222,7 @@ def simulation_kernel_no_noise(state_genotypes, phenotypes, num_layers, around_s
         for col in range(start_col, start_col + COLS_PER_THREAD):
             # Update the state in every layer this individual uses.
             for layer in range(0, num_layers):
-                update_cell_no_noise(num_layers, layer, phenotypes, state_genotypes, around_start, above_start, pop_idx, step, row, col, above_map, below_map)
+                update_cell_no_noise(num_layers, layer, phenotypes, state_genotypes, pop_idx, step, row, col)
         # Make sure all threads have finished computing this step before going
         # on to the next one.
         cuda.syncthreads()
@@ -302,7 +297,7 @@ def run_sim_noise(state_genotypes, num_layers, around_start, above_start, phenot
 
     return phenotypes
 
-def run_sim_no_noise(state_genotypes, num_layers, around_start, above_start, phenotypes, below_map, above_map):
+def run_sim_no_noise(state_genotypes, num_layers, phenotypes):
     """
     Run the simulation with no noise.
     """
@@ -311,8 +306,6 @@ def run_sim_no_noise(state_genotypes, num_layers, around_start, above_start, phe
     # Copy input data from host memory to device memory.
     d_phenotypes = cuda.to_device(phenotypes)
     d_state_genotypes = cuda.to_device(state_genotypes)
-    d_below_map = cuda.to_device(below_map)
-    d_above_map = cuda.to_device(above_map)
 
     # Actually run the simulation for all individuals in parallel on the GPU.
     simulation_kernel_no_noise[
@@ -323,29 +316,29 @@ def run_sim_no_noise(state_genotypes, num_layers, around_start, above_start, phe
         # the CA world to compute, and the Y dimension is multiplied by
         # COLS_PER_THREAD to find the first column to start from.
         (WORLD_SIZE, COL_BATCH_SIZE)
-    ](d_state_genotypes, d_phenotypes, num_layers, around_start, above_start, d_above_map, d_below_map)
+    ](d_state_genotypes, d_phenotypes, num_layers)
 
     # Copy output data from device memory to host memory.
     phenotypes = d_phenotypes.copy_to_host()
         
     # Layer1 in all phenotypes from all steps of the simulation has a
     # granularity of 2x2.
-    if phenotypes.shape[2] > 1:
-        assert all(check_granularity(2, p)
-                for p in np.reshape(
-                    phenotypes[:, :, 1], (-1, WORLD_SIZE, WORLD_SIZE))) 
+    # if phenotypes.shape[2] > 1:
+    #     assert all(check_granularity(2, p)
+    #             for p in np.reshape(
+    #                 phenotypes[:, :, 1], (-1, WORLD_SIZE, WORLD_SIZE))) 
 
     # Layer2 in all phenotypes from all steps of the simulation has a
     # granularity of 4x4.
-    if phenotypes.shape[2] > 2:
-        assert all(check_granularity(4, p)
-                for p in np.reshape(
-                    phenotypes[:, :, 2], (-1, WORLD_SIZE, WORLD_SIZE)))
+    # if phenotypes.shape[2] > 2:
+    #     assert all(check_granularity(4, p)
+    #             for p in np.reshape(
+    #                 phenotypes[:, :, 2], (-1, WORLD_SIZE, WORLD_SIZE)))
 
     return phenotypes
     
 
-def simulate(state_genotypes, num_layers, around_start, above_start, phenotypes, below_map, above_map, noise=None):
+def simulate(state_genotypes, num_layers, phenotypes, noise=None):
     """Simulate genotypes and return phenotype videos."""
 
     # Infer population size from genotypes
@@ -365,13 +358,11 @@ def simulate(state_genotypes, num_layers, around_start, above_start, phenotypes,
 
     assert phenotypes.shape == (
         pop_size, NUM_STEPS, num_layers, WORLD_SIZE, WORLD_SIZE)
-    assert above_map.shape == (num_layers, 3)
-    assert below_map.shape == (num_layers, 4, 3)
 
     if noise is not None:
         return run_sim_noise(state_genotypes, num_layers, around_start, above_start, phenotypes, below_map, above_map, noise)
     else:
-        return run_sim_no_noise(state_genotypes, num_layers, around_start, above_start, phenotypes, below_map, above_map)
+        return run_sim_no_noise(state_genotypes, num_layers, phenotypes)
 
 def make_seed_phenotypes(pop_size, n_layers=4):
     """Starting phenotypes to use by default (one ALIVE cell in middle)."""
