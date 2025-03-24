@@ -32,9 +32,6 @@ class AgeFitnessPareto:
         self.mutation_data_history = []
         self.n_neutral_over_generations = []
 
-        self.below_map = self.initialize_below_map()
-        self.above_map = self.initialize_above_map()
-
     def evolve(self):
         self.initialize_population()
         while self.current_generation <= self.max_generations:
@@ -56,11 +53,7 @@ class AgeFitnessPareto:
         full_phenotypes = simulate(
             unsimulated_state_genotypes, 
             self.n_layers, 
-            self.population[0].around_start, 
-            self.population[0].above_start, 
-            init_phenotypes, 
-            self.below_map,
-            self.above_map)
+            init_phenotypes)
 
         elapsed = time.perf_counter() - start
         lps = self.target_population_size / elapsed
@@ -73,6 +66,7 @@ class AgeFitnessPareto:
 
         parent_child_distances = []
         n_neutral = 0
+        n_all_dead_or_all_alive = 0
         # Set the fitness and simulated flag for each of the solutions just evaluated 
         for i, idx in enumerate(unsimulated_indices):
             self.population[idx].set_fitness(fitness_scores[i])
@@ -85,11 +79,12 @@ class AgeFitnessPareto:
                     n_neutral += 1
                 parent_child_distances.append(self.population[idx].get_distance_from_parent(parent))
 
-            if self.homeostasis_steps > 1:
+            if fitness_scores[i] == 1000000:
+                n_all_dead_or_all_alive += 1
+            elif self.homeostasis_steps > 1:
                 # Check if the phenotype is the same for all homeostasis steps
                 if all([(phenotypes[i][j] == phenotypes[i][0]).all() for j in range(self.homeostasis_steps)]):
-                    if fitness_scores[i] < 1000000:
-                        self.population[idx].set_homeostatic(True)
+                    self.population[idx].set_homeostatic(True)
 
         mean_fitness = np.mean([sol.fitness for sol in self.population])
         print('Average fitness:', mean_fitness)
@@ -97,6 +92,7 @@ class AgeFitnessPareto:
         print('Average age:', np.mean([sol.age for sol in self.population]))
         print('Number neutral: ', n_neutral, '/', self.target_population_size, ' (', n_neutral / self.target_population_size, ')')
         print('Number homeostatic: ', np.sum([sol.homeostatic for sol in self.population]), '/', self.target_population_size, ' (', np.sum([sol.homeostatic for sol in self.population]) / self.target_population_size, ')')
+        print('Number all dead or all alive: ', n_all_dead_or_all_alive, '/', self.target_population_size, ' (', n_all_dead_or_all_alive / self.target_population_size, ')')
         # Reduce the population
         self.reduce_population()
         # Increment ages by 1
@@ -261,38 +257,6 @@ class AgeFitnessPareto:
             phenotypes[i][0][self.base_layer][middle_start:middle_end, middle_start:middle_end] = ALIVE
 
         return phenotypes
-    
-    def initialize_below_map(self):
-        below_map = np.zeros((self.n_layers, 4, 3)).astype(int)
-        if self.neighbor_map_type == 'random':
-            for l in range(self.n_layers):
-                for i in range(4):
-                    rand_l = np.random.randint(self.n_layers)
-                    rand_r_offset = np.random.randint(WORLD_SIZE)
-                    rand_c_offset = np.random.randint(WORLD_SIZE)
-                    below_map[l, i] = [rand_l, rand_r_offset, rand_c_offset]
-        else:
-            for l in range(self.n_layers):
-                below_map[l, 0] = [l-1, 0, 0]
-                below_map[l, 1] = [l-1, 0, 1]
-                below_map[l, 2] = [l-1, 1, 0]
-                below_map[l, 3] = [l-1, 1, 1]
-
-        return below_map
-    
-    def initialize_above_map(self):
-        above_map = np.zeros((self.n_layers, 3)).astype(int)
-        if self.neighbor_map_type == 'random':
-            for l in range(self.n_layers):
-                rand_l = np.random.randint(self.n_layers)
-                rand_r_offset = np.random.randint(WORLD_SIZE)
-                rand_c_offset = np.random.randint(WORLD_SIZE)
-                above_map[l] = [rand_l, rand_r_offset, rand_c_offset]
-        else:
-            for l in range(self.n_layers):
-                above_map[l] = [l+1, 0, 0]
-
-        return above_map
 
     def pickle_afpo(self, pickle_file_name):
         with open(pickle_file_name, 'wb') as pf:
