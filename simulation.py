@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image
 
 # Phenotype development unfolds over NUM_STEPS time steps.
-NUM_STEPS = 100
+NUM_STEPS = 128
 # This code models hierarchical CAs with 1, 2, 3, or 4 layers.
 NUM_LAYERS = 5
 # Phenotypes are all 64x64 squares.
@@ -137,26 +137,26 @@ def look_up(num_layers, layer, phenotypes, genotypes, up_weights_start, pop_idx,
 
 
 @cuda.jit
-def look_around(layer, phenotypes, genotypes, pop_idx, step, row, col):
+def look_around(update_layer, neighbor_layer, phenotypes, genotypes, weights_start, pop_idx, step, row, col):
     """Compute the weighted sum of this cell's neighbors in this layer."""
-    weight_index = 0
+    weight_index = weights_start
     result = 0
     # Look at a Moore neighborhood around (row, col) in the current layer.
-    for l in range(0, NUM_LAYERS):
-        for r in range(row-1, row+2, 1):
-            for c in range(col-1, col+2, 1):
-                # Do wrap-around bounds checking. This may be inefficient, since
-                # we're doing extra modulus operations and working on
-                # non-contiguous memory may prevent coallesced reads. However, it's
-                # simple, and avoids complications when working with different
-                # granularities.
-                r = r % WORLD_SIZE
-                c = c % WORLD_SIZE
-                
-                neighbor_state = phenotypes[pop_idx][step-1][l][r][c]
-                weight = genotypes[pop_idx, layer][weight_index]
-                result += neighbor_state * weight
-                weight_index += 1
+    # for l in range(0, NUM_LAYERS):
+    for r in range(row-1, row+2):
+        for c in range(col-1, col+2):
+            # Do wrap-around bounds checking. This may be inefficient, since
+            # we're doing extra modulus operations and working on
+            # non-contiguous memory may prevent coallesced reads. However, it's
+            # simple, and avoids complications when working with different
+            # granularities.
+            r = r % WORLD_SIZE
+            c = c % WORLD_SIZE
+            
+            neighbor_state = phenotypes[pop_idx][step-1][neighbor_layer][r][c]
+            weight = genotypes[pop_idx][update_layer][weight_index]
+            result += neighbor_state * weight
+            weight_index += 1
     return result
 
 
@@ -180,7 +180,10 @@ def update_cell(num_layers, layer, phenotypes, state_genotypes, around_start, ab
 def update_cell_no_noise(num_layers, layer, phenotypes, state_genotypes, pop_idx, step, row, col):
     """Compute the next state for a single cell in layer0 from prev states."""
     # Calculate the weighted sum of all neighbors.
-    signal_sum = look_around(layer, phenotypes, state_genotypes, pop_idx, step, row, col)
+    signal_sum = 0
+    for neighbor_layer in range(num_layers):
+        weights_start = neighbor_layer * 9  # Each layer uses 9 weights for Moore neighborhood
+        signal_sum += look_around(layer, neighbor_layer, phenotypes, state_genotypes, weights_start, pop_idx, step, row, col)
 
     phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum)
 
@@ -202,8 +205,9 @@ def simulation_kernel(state_genotypes, phenotypes, num_layers, around_start, abo
             # Update the state in every layer this individual uses.
             for layer in range(0, num_layers):
                 update_cell(num_layers, layer, phenotypes, state_genotypes, around_start, above_start, pop_idx, step, row, col, above_map, below_map, noise)
-        # Make sure all threads have finished computing this step before going
-        # on to the next one.
+        
+        # Make sure all threads have finished writing to the current step before
+        # moving on to read from it in the next step
         cuda.syncthreads()
 
 @cuda.jit(max_registers=64)
@@ -223,8 +227,9 @@ def simulation_kernel_no_noise(state_genotypes, phenotypes, num_layers):
             # Update the state in every layer this individual uses.
             for layer in range(0, num_layers):
                 update_cell_no_noise(num_layers, layer, phenotypes, state_genotypes, pop_idx, step, row, col)
-        # Make sure all threads have finished computing this step before going
-        # on to the next one.
+        
+        # Make sure all threads have finished writing to the current step before
+        # moving on to read from it in the next step
         cuda.syncthreads()
 
 def get_layer_mask(l):
