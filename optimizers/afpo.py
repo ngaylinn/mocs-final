@@ -6,7 +6,7 @@ from collections import Counter
 import numpy as np
 
 from simulation import simulate, get_layer_mask, DEAD, ALIVE, WORLD_SIZE, NUM_STEPS, NUM_LAYERS, NUM_INPUT_NEURONS, NUM_OUTPUT_NEURONS
-from util import create_hollow_circle, create_square, create_diamond, create_plus, create_complex
+from util import create_hollow_circle, create_square, create_diamond, create_plus, create_complex, simulate_one_individual
 from solution import Solution
 
 class AgeFitnessPareto:
@@ -85,6 +85,7 @@ class AgeFitnessPareto:
                 # Check if the phenotype is the same for all homeostasis steps
                 if all([(phenotypes[i][j] == phenotypes[i][0]).all() for j in range(self.homeostasis_steps)]):
                     self.population[idx].set_homeostatic(True)
+                    self.population[idx].set_fitness(self.population[idx].fitness - 10000)
 
         mean_fitness = np.mean([sol.fitness for sol in self.population])
         print('Average fitness:', mean_fitness)
@@ -229,7 +230,7 @@ class AgeFitnessPareto:
             fitness_scores[i] = np.sum(np.abs(target - phenotypes[i]))
 
             # Select against all-dead or all-alive phenotypes
-            if (phenotypes[i] == 0).all() or (phenotypes[i] == 1).all():
+            if (phenotypes[i] == 0).all() or (phenotypes[i] == 1).all() or fitness_scores[i] == 10240:
                 fitness_scores[i] = 1000000
 
         return phenotypes, fitness_scores
