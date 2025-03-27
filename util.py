@@ -1,5 +1,5 @@
 import numpy as np
-
+from typing import List
 from solution import Solution
 from simulation import simulate, make_seed_phenotypes, make_seed_phenotypes_layer
 
@@ -112,18 +112,14 @@ def simulate_one_individual(afpo, solution : Solution):
     
     return phenotypes[0]
 
-def simulate_n_individuals(solutions):
-    n = len(solutions)
-    n_layers = solutions[0].n_layers
-    base_layer = solutions[0].base_layer
-    init_phenotypes = make_seed_phenotypes(n, n_layers)
-
+def simulate_n_individuals(afpo, solutions: List[Solution]):
+    init_phenotypes = make_seed_phenotypes_layer(len(solutions), 
+                                                n_layers=afpo.n_layers, 
+                                                base_layer=afpo.base_layer)
+    print(init_phenotypes.shape)
     phenotypes = simulate(
-            np.array([soln.growth_genotype for soln in solutions]), 
-            np.array([soln.state_genotype for soln in solutions]), 
-            n_layers, 
-            base_layer,  
-            True, 
-            init_phenotypes)
+            np.array([solution.state_genotype for solution in solutions]),
+            afpo.n_layers,  
+            phenotypes=init_phenotypes)
     
-    return phenotypes[:,-1,:,:,:]
+    return phenotypes
