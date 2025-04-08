@@ -5,6 +5,7 @@ import random
 
 from simulation import simulate
 from optimizers.afpo import Solution
+from util import simulate_one_individual
 
 class NeutralEngine:
     """
@@ -66,7 +67,7 @@ class NeutralEngine:
 
         
         # Simulate the random children 
-        phenotypes = simulate(
+        child_full_phenotypes = simulate(
             state_genotypes, 
             self.experiment.n_layers, 
             self.child_population[0].around_start, 
@@ -77,13 +78,13 @@ class NeutralEngine:
             # self.experiment.above_map)
         
         # fitness_scores, binarized_phenotypes = self.experiment.evaluate_phenotypes(phenotypes)
-        fitness_scores = self.experiment.evaluate_phenotypes(phenotypes)
+        child_binarized_phenotypes, fitness_scores = self.experiment.evaluate_phenotypes(child_full_phenotypes)
 
         parent_ids = np.unique([sol.parent_id for sol in self.child_population])
         parent_state_genotypes = np.array([sol.state_genotype for sol in self.parent_population if sol.id in parent_ids])
         init_parents_phenotypes = self.experiment.make_seed_phenotypes(len(parent_ids))
         
-        parent_phenotypes = simulate(
+        parent_full_phenotypes = simulate(
             parent_state_genotypes, 
             self.experiment.n_layers, 
             self.parent_population[0].around_start, 
@@ -97,20 +98,19 @@ class NeutralEngine:
         neutral_signaling_children = []
         for i, child in enumerate(self.child_population):
             # Binarize and evaluate phenotype
-            binarized_phenotype = phenotypes[i, -5:, self.experiment.base_layer] > 0
-            child.set_phenotype(binarized_phenotype)
+            child.set_phenotype(child_binarized_phenotypes[i])
             child.set_fitness(fitness_scores[i])
             
             # self.child_population[i].set_full_phenotype(phenotypes[i])
 
-            same_phenotype_as_parent = (binarized_phenotype == self.init_solution.phenotype).all()
+            same_phenotype_as_parent = (child_binarized_phenotypes[i] == self.init_solution.phenotype).all()
 
             # Calculate parent signaling distance
             parent_id, parent = next(((i, sol) for i, sol in enumerate(self.parent_population) if sol.id == child.parent_id), None)
             parent_phenotype_idx, parent_id = next(((i, parent_id) for i, parent_id in enumerate(parent_ids) if parent_id == child.parent_id), None)
 
-            child.signaling_distance = np.sum(np.abs(parent_phenotypes[parent_phenotype_idx] - phenotypes[i]))
-            child.full_signaling_distance = np.sum(np.abs(self.init_solution.full_phenotype - phenotypes[i]))
+            child.signaling_distance = np.sum(np.abs(parent_full_phenotypes[parent_phenotype_idx] - child_full_phenotypes[i]))
+            child.full_signaling_distance = np.sum(np.abs(self.init_solution.full_phenotype - child_full_phenotypes[i]))
             child.genotype_distance = np.sum(np.abs(self.init_solution.state_genotype - child.state_genotype))
 
             # Track neutral mutations
@@ -178,28 +178,16 @@ class NeutralEngine:
             self.child_population.append(child)
 
     def simulate_initial_genotype(self):
-        init_phenotypes = self.experiment.make_seed_phenotypes(1)
+        full_phenotypes = simulate_one_individual(self.experiment, self.init_solution)
 
-        
-        # Simulate the random children 
-        phenotypes = simulate(
-            np.array([self.init_genotype]), 
-            self.experiment.n_layers, 
-            self.init_solution.around_start, 
-            self.init_solution.above_start, 
-            init_phenotypes, 
-            self.experiment.below_map,
-            self.experiment.above_map) # ,
-            # self.experiment.above_map)
-
-
-        fitness_scores = self.experiment.evaluate_phenotypes(phenotypes)
+        binarized_phenotypes, fitness_scores = self.experiment.evaluate_phenotypes(np.array([full_phenotypes]))
         print(f'''
         Initial genotype fitness: {fitness_scores[0]}
+        Fitness scores: {fitness_scores.shape}
         ''')
         self.init_solution.set_fitness(fitness_scores[0])
-        self.init_solution.set_phenotype(phenotypes[0, -5:, self.experiment.base_layer] > 0)
-        self.init_solution.set_full_phenotype(phenotypes[0])
+        self.init_solution.set_phenotype(binarized_phenotypes[0])
+        self.init_solution.set_full_phenotype(full_phenotypes[0])
         self.init_solution.full_signaling_distance = 0
 
     def longest_signaling_distance_from_original(self):
