@@ -90,6 +90,7 @@ class AgeFitnessPareto:
                 if all([(phenotypes[i][j] == phenotypes[i][0]).all() for j in range(self.homeostasis_steps)]):
                     if fitness_scores[i] < 1000000:
                         self.population[idx].set_homeostatic(True)
+                        self.population[idx].set_fitness(self.population[idx].fitness - 10000)
 
         mean_fitness = np.mean([sol.fitness for sol in self.population])
         print('Average fitness:', mean_fitness)
@@ -233,7 +234,7 @@ class AgeFitnessPareto:
             fitness_scores[i] = np.sum(np.abs(target - phenotypes[i]))
 
             # Select against all-dead or all-alive phenotypes
-            if (phenotypes[i] == 0).all() or (phenotypes[i] == 1).all():
+            if (phenotypes[i] == 0).all() or (phenotypes[i] == 1).all() or fitness_scores[i] == 10240:
                 fitness_scores[i] = 1000000
 
         return phenotypes, fitness_scores
