@@ -175,7 +175,7 @@ def update_cell(num_layers, layer, phenotypes, state_genotypes, around_start, ab
 
     signal_sum = around_signal_sum + down_signal_sum + up_signal_sum #  + up_signal_sum
 
-    phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum) * noise[step, layer, (row//g)*g, (col//g)*g]
+    phenotypes[pop_idx][step][layer][row][col] = activate_sigmoid(signal_sum) * noise[pop_idx, step, layer, (row//g)*g, (col//g)*g]
 
 @cuda.jit
 def update_cell_no_noise(num_layers, layer, phenotypes, state_genotypes, around_start, above_start, pop_idx, step, row, col, above_map, below_map):
