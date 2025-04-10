@@ -2,7 +2,7 @@ import pickle
 import time
 import os
 import argparse
-
+from typing import List
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
@@ -150,6 +150,17 @@ def simulate_one_individual_noisy(afpo, solution : Solution, noise):
             noise=noise)
     
     return phenotypes[0]
+
+def simulate_n_individuals_noisy(optimizer, solutions : List[Solution], noise):
+    init_phenotypes = make_seed_phenotypes_layer(len(solutions), n_layers=optimizer.n_layers, base_layer=optimizer.base_layer)
+
+    phenotypes = simulate(
+            np.array([solution.state_genotype for solution in solutions]),
+            optimizer.n_layers,
+            phenotypes=init_phenotypes,
+            noise=noise)
+    
+    return phenotypes
 
 def simulate_n_individuals(solutions):
     n = len(solutions)
