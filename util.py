@@ -116,23 +116,20 @@ def simulate_one_individual(afpo, solution : Solution):
     
     return phenotypes[0]
 
-def simulate_n_individuals(solutions):
+def simulate_n_individuals(afpo, solutions):
     n = len(solutions)
     n_layers = solutions[0].n_layers
-    base_layer = solutions[0].base_layer
     around_start = solutions[0].around_start
     above_start = solutions[0].above_start
-    init_phenotypes = make_seed_phenotypes(n, n_layers)
+    init_phenotypes = make_seed_phenotypes(n, n_layers, afpo.base_layer)
 
     phenotypes = simulate(
-            np.array([soln.growth_genotype for soln in solutions]), 
-            np.array([soln.state_genotype for soln in solutions]), 
-            n_layers, 
-            base_layer,  
+            np.array([solution.state_genotype for solution in solutions]),
+            n_layers,  
             around_start, 
             above_start, 
-            True, 
-            init_phenotypes, 
-            0) # sigmoid default currently 
+            phenotypes=init_phenotypes,
+            below_map=afpo.below_map,
+            above_map=afpo.above_map)
     
-    return phenotypes[:,-1,:,:,:]
+    return phenotypes
