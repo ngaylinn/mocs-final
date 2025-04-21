@@ -38,30 +38,28 @@ def simulate_one_individual(exp, solution):
     return phenotypes
 
 parser = argparse.ArgumentParser()
-parser.add_argument('exp_file', type=str, help='Experiment File')
+parser.add_argument('--exp_file', type=str, help='Experiment File')
+parser.add_argument('--walk_type', type=str, help='Walk Type', default='random', choices=['random', 'genotype_distance'])
 args = parser.parse_args()
-
-# ne_old = get_experiment('./neutral_walker_Apr15_circle_betta2.pkl')
-# best = ne_old.beneficial_solutions[0]
 
 exp = get_experiment(args.exp_file)
 best = exp.best_solution()
 
-best.neutral_counter = 0
 print('best fitness: ', best.fitness)
 
-
-
 best.genotype_distance = 0
-ne = NeutralEngine(exp, best, best.state_genotype, mutate_layers=None)
-ne.run(10)
+ne = NeutralEngine(exp, best, best.state_genotype, mutate_layers=None, walk_type=args.walk_type)
+ne.run(30)
+
+neutral_network_file = f'{args.exp_file.split(".")[0]}_neutral_network_{args.walk_type}.pkl'
+ne.pickle_neutral_network(neutral_network_file)
 
 
 ##### 
 
-signaling_dist, sig_sol = ne.longest_signaling_distance_from_original()
-neutral_walk_length, neutral_sol = ne.longest_neutral_walk_from_original()
-genotype_distance, genotype_sol = ne.longest_genotype_distance_from_original()
+# signaling_dist, sig_sol = ne.longest_signaling_distance_from_original()
+# neutral_walk_length, neutral_sol = ne.longest_neutral_walk_from_original()
+# genotype_distance, genotype_sol = ne.longest_genotype_distance_from_original()
 
 '''
 # One parameter at a time
@@ -85,20 +83,20 @@ with open(f'nw_Sep7_diamond_l2_t0.pkl', 'wb') as pf:
 
 
 
-print('Longest signaling distance: ', signaling_dist, f' (neutral path length: {sig_sol.neutral_counter})')
-print('Longest neutral path: ', neutral_walk_length, f' (signaling distance: {neutral_sol.signaling_distance})')
-print('Longest genotype distance: ', genotype_distance, f' (genotype distance: {genotype_sol.genotype_distance})')
+# print('Longest signaling distance: ', signaling_dist, f' (neutral path length: {sig_sol.neutral_counter})')
+# print('Longest neutral path: ', neutral_walk_length, f' (signaling distance: {neutral_sol.signaling_distance})')
+# print('Longest genotype distance: ', genotype_distance, f' (genotype distance: {genotype_sol.genotype_distance})')
 
-phenotypes_max_signaling = simulate_one_individual(exp, sig_sol)
-phenotypes_orig = simulate_one_individual(exp, ne.init_solution)
-phenotypes_max_neutral_walk = simulate_one_individual(exp, neutral_sol)
-phenotypes_max_genotype_distance = simulate_one_individual(exp, genotype_sol)
+# phenotypes_max_signaling = simulate_one_individual(exp, sig_sol)
+# phenotypes_orig = simulate_one_individual(exp, ne.init_solution)
+# phenotypes_max_neutral_walk = simulate_one_individual(exp, neutral_sol)
+# phenotypes_max_genotype_distance = simulate_one_individual(exp, genotype_sol)
 
 
-visualize_all_layers(phenotypes_orig[0], './neutral_walk/orig.gif', base_layer_idx=exp.base_layer)
-visualize_all_layers(phenotypes_max_signaling[0], './neutral_walk/max_signaling.gif', base_layer_idx=exp.base_layer)
-visualize_all_layers(phenotypes_max_neutral_walk[0], './neutral_walk/max_neutralwalk.gif', base_layer_idx=exp.base_layer)
-visualize_all_layers(phenotypes_max_genotype_distance[0], './neutral_walk/genotype_dist.gif', base_layer_idx=exp.base_layer)
+# visualize_all_layers(phenotypes_orig[0], './neutral_walk/orig.gif', base_layer_idx=exp.base_layer)
+# visualize_all_layers(phenotypes_max_signaling[0], './neutral_walk/max_signaling.gif', base_layer_idx=exp.base_layer)
+# visualize_all_layers(phenotypes_max_neutral_walk[0], './neutral_walk/max_neutralwalk.gif', base_layer_idx=exp.base_layer)
+# visualize_all_layers(phenotypes_max_genotype_distance[0], './neutral_walk/genotype_dist.gif', base_layer_idx=exp.base_layer)
 
 '''
 # frames = [5, 10, 25, 99]
