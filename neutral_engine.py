@@ -13,17 +13,18 @@ class NeutralEngine:
     along the neutral network of the phenotype. 
     - Does not need "fitness"
     """
-    def __init__(self, exp, init_solution, init_genotype, mutate_layers=None, mutate_param=None):
+    def __init__(self, exp, init_solution, init_genotype, mutate_layers=None, mutate_param=None, walk_type='random'):
         self.experiment = exp
         self.init_genotype = init_genotype
         self.mutate_layers = mutate_layers
         self.mutate_param = mutate_param
+        self.walk_type = walk_type
 
         self.child_population = []
         self.parent_population = []
         self.beneficial_solutions = []
         self.num_ids = 1
-        self.pop_size = 400 # self.experiment.target_population_size
+        self.pop_size = 500 # self.experiment.target_population_size
         # self.init_solution = Solution(layers=exp.layers, id=0)
         self.init_solution = init_solution
         self.init_solution.fitness_history = []
@@ -34,6 +35,7 @@ class NeutralEngine:
         self.simulate_initial_genotype()
 
         self.param_data = []
+        self.neutral_network = [init_solution]
 
     def run(self, n_steps=10):
         self.init_pop()
@@ -139,11 +141,11 @@ class NeutralEngine:
         # print(np.sum(fitness_scores < self.init_solution.fitness), ' beneficial mutations')
         # print(len(neutral_signaling_children), ' neutral w/ different signaling')
         # print(len(self.beneficial_solutions), ' total beneficial solutions found')
+        print("Neutral network size: ", len(self.neutral_network))
+
+        self.neutral_network += neutral_signaling_children
 
         self.neutral_percent = len(neutral_signaling_children) / len(self.child_population)
-
-        # if len(self.beneficial_solutions) > 0:
-        #     self.pickle_ne('./Apr14_beneficial.pkl')
 
         # Select for the longest neutral paths
         self.select(neutral_signaling_children)
@@ -158,11 +160,15 @@ class NeutralEngine:
         
         # new_parent_pop = []
         new_parent_pop = list(reversed(sorted([(sol.neutral_counter, sol) for i, sol in enumerate(self.parent_population)])))
-        # self.parent_population = random.sample(self.parent_population, self.pop_size)
+        if self.walk_type == 'random':
+            self.parent_population = random.sample(self.parent_population, self.pop_size)
+        elif self.walk_type == 'genotype_distance':
+            self.parent_population = list(sorted(self.parent_population, key=lambda sol: sol.genotype_distance))
+            self.parent_population = self.parent_population[:self.pop_size]
         # while len(new_parent_pop) < 500:
         #     _, max_path_length_solution = self.longest_neutral_walk_from_original()
         #     new_parent_pop.append(max_path_length_solution)
-        self.parent_population = [sol for neutral, sol in new_parent_pop[:self.pop_size]]
+        # self.parent_population = [sol for neutral, sol in new_parent_pop[:self.pop_size]]
 
 
     def generate_new_children(self):
@@ -171,9 +177,13 @@ class NeutralEngine:
         print('Max neutral path length: ', max([p.neutral_counter for p in self.parent_population]))
         self.child_population = []
         for _ in range(self.pop_size):
-            # rand_parent = np.random.randint(n)
-            # parent = self.parent_population[rand_parent]
-            parent = list(sorted(self.parent_population, key=lambda sol: sol.genotype_distance))[-1]
+            # Totally random parent
+            # if self.walk_type == 'random':
+            rand_parent = np.random.randint(n)
+            parent = self.parent_population[rand_parent]
+            # elif self.walk_type == 'genotype_distance':
+            #     # Maximize genotype distance
+            #     parent = list(sorted(self.parent_population, key=lambda sol: sol.genotype_distance))[-1]
             child = parent.make_offspring(self.get_available_id(), self.mutate_layers, self.mutate_param)
             self.child_population.append(child)
 
@@ -210,3 +220,7 @@ class NeutralEngine:
     def pickle_param(self, file_name):
         with open(file_name, 'wb') as pf:
             pickle.dump(self.param_data, pf, protocol=pickle.HIGHEST_PROTOCOL)
+
+    def pickle_neutral_network(self, file_name):
+        with open(file_name, 'wb') as pf:
+            pickle.dump(self.neutral_network, pf, protocol=pickle.HIGHEST_PROTOCOL)
