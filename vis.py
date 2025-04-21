@@ -2,6 +2,8 @@ import pickle
 import time
 import os
 import argparse
+import umap
+import random
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -290,3 +292,164 @@ def visualize_all_layers_last_timestep(phenotype, filename):
     frame = make_frame(phenotype[-1]) 
     
     frame.save(filename)
+
+def visualize_points_umap(points, labels=None, n_neighbors=15, min_dist=0.1, title="UMAP Visualization", filename="umap_visualization.png"):
+    """
+    Visualize high-dimensional points using UMAP.
+    
+    Args:
+        points (np.ndarray): Array of shape (n_samples, n_features) containing the points to visualize
+        labels (np.ndarray, optional): Array of labels for coloring the points
+        n_neighbors (int): Number of neighbors to consider in UMAP (default: 15)
+        min_dist (float): Minimum distance between points in the embedding (default: 0.1)
+        title (str): Title for the plot
+    """
+    # Create UMAP reducer
+    reducer = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist, random_state=42)
+    
+    # Fit and transform the data
+    embedding = reducer.fit_transform(points)
+    
+    # Create the plot
+    plt.figure(figsize=(10, 8))
+    
+    if labels is not None:
+        scatter = plt.scatter(embedding[1:, 0], embedding[1:, 1], cmap='tab20')
+        # Add seed genotype point in red with a larger size
+        plt.scatter(embedding[0, 0], embedding[0, 1], c='red', s=100, label='Seed genotype')
+        plt.colorbar(scatter)
+    else:
+        plt.scatter(embedding[1:, 0], embedding[1:, 1], alpha=0.5)
+        # Add seed genotype point in red with a larger size
+        plt.scatter(embedding[0, 0], embedding[0, 1], c='red', s=100, label='Seed genotype')
+    
+    plt.legend()
+    plt.title(title)
+    plt.xlabel('UMAP 1')
+    plt.ylabel('UMAP 2')
+    
+    plt.savefig(filename)
+    plt.close()
+
+def visualize_neutral_network(neutral_network_file):
+    with open(neutral_network_file, 'rb') as f:
+        neutral_network = pickle.load(f)
+
+    points = np.array([sol.state_genotype.flatten() for sol in neutral_network])
+    # labels = np.array([sol.fitness for sol in neutral_network])
+
+    vis_path = f'./vis/neutral_network_umaps/{neutral_network_file.replace("/", "_").replace(".", "_")}.png'
+    visualize_points_umap(points, filename=vis_path)
+
+def visualize_two_sets_of_points_umap(points1, points2, n_neighbors=15, min_dist=0.1, title="UMAP Visualization", filename="umap_visualization.png"):
+    # Create UMAP reducer
+    reducer = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist, random_state=42)
+    
+    # Fit and transform the data
+    
+    # Combine points and transform together
+    combined_points = np.vstack([points1, points2])
+    combined_embedding = reducer.fit_transform(combined_points)
+    
+    # Split back into separate embeddings
+    embedding1 = combined_embedding[:len(points1)]
+    embedding2 = combined_embedding[len(points1):]
+    
+    # Create the plot
+    plt.figure(figsize=(10, 8))
+    
+    plt.scatter(embedding1[1:, 0], embedding1[1:, 1], alpha=0.5, c='red')
+    plt.scatter(embedding2[1:, 0], embedding2[1:, 1], alpha=0.5, c='blue')
+    # Add seed genotype point in red with a larger size
+    plt.scatter(embedding1[0, 0], embedding1[0, 1], c='#00ff00', s=100, label='Seed genotype 1')
+    plt.scatter(embedding2[0, 0], embedding2[0, 1], c='#00ff00', s=100, label='Seed genotype 2')
+    
+    plt.legend()
+    plt.title(title)
+    plt.xlabel('UMAP 1')
+    plt.ylabel('UMAP 2')
+    
+    plt.savefig(filename)
+    plt.close()
+
+def visualize_two_neutral_networks(neutral_network_file1, neutral_network_file2):
+    with open(neutral_network_file1, 'rb') as f:
+        neutral_network1 = pickle.load(f)
+    with open(neutral_network_file2, 'rb') as f:
+        neutral_network2 = pickle.load(f)
+
+    points1 = np.array([sol.state_genotype.flatten() for sol in neutral_network1])
+    points2 = np.array([sol.state_genotype.flatten() for sol in neutral_network2])
+
+    vis_path = f'./vis/neutral_network_umaps/{neutral_network_file1.replace("/", "_").replace(".", "_")}_and_{neutral_network_file2.replace("/", "_").replace(".", "_")}.png'
+    visualize_two_sets_of_points_umap(points1, points2, filename=vis_path)
+    
+def plot_points_umap(points, reducer):    
+    # Fit and transform the data
+    embedding = reducer.fit_transform(points)
+    
+    # Generate a random color
+    random_color = '#%06x' % random.randint(0, 0xFFFFFF)
+    plt.scatter(embedding[1:, 0], embedding[1:, 1], alpha=0.5, c=random_color)
+    # Add seed genotype point in red with a larger size
+    plt.scatter(embedding[0, 0], embedding[0, 1], c='red', s=100, label='Seed genotype')
+
+
+def random_genotype(n, genotype_length):
+    return np.random.random((n, genotype_length)) * 2 - 1
+
+def visualize_n_neutral_networks(neutral_network_files, filename, n_neighbors=15, min_dist=0.1, random_background=False):
+    reducer = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist, random_state=42)
+    plt.figure(figsize=(10, 8))
+
+    aggregated_points = []
+
+    for neutral_network_file in neutral_network_files:
+        with open(neutral_network_file, 'rb') as f:
+            neutral_network = pickle.load(f)
+
+        points = np.array([sol.state_genotype.flatten() for sol in neutral_network])
+        aggregated_points.append(points)
+
+    if random_background:
+        random_background_points = random_genotype(n=1000, genotype_length=points.shape[1])
+        aggregated_points.append(random_background_points)
+
+    # Track info to recover the original points
+    neutral_network_shapes = [points.shape for points in aggregated_points]
+
+    aggregated_points = np.vstack(aggregated_points)
+    embedding = reducer.fit_transform(aggregated_points)
+
+    print(aggregated_points.shape)
+    print(embedding.shape)
+    print(neutral_network_shapes)
+
+    # Recover the original points
+    for i, shape in enumerate(neutral_network_shapes):
+        print(shape)
+
+        if i == 0:
+            embedding_slice = embedding[:shape[0]]
+        elif i == len(neutral_network_shapes) - 1:
+            start_idx = sum([neutral_network_shapes[j][0] for j in range(i)])
+            embedding_slice = embedding[start_idx:]
+        else:
+            start_idx = sum([neutral_network_shapes[j][0] for j in range(i)])
+            end_idx = sum([neutral_network_shapes[j][0] for j in range(i+1)])
+            embedding_slice = embedding[start_idx:end_idx]
+        
+        print(embedding_slice.shape)
+
+        random_color = '#%06x' % random.randint(0, 0xFFFFFF)
+        plt.scatter(embedding_slice[:, 0], embedding_slice[:, 1], alpha=0.5, c=random_color)
+
+        # Add seed genotype point in red with a larger size
+        plt.scatter(embedding_slice[0, 0], embedding_slice[0, 1], c='red', s=100, label='Seed genotype')
+    
+    plt.savefig(filename)
+    plt.close()
+    
+    # plt.savefig(filename)
+    # plt.close()
+
