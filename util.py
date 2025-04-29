@@ -1,5 +1,5 @@
 import numpy as np
-
+import pickle
 from solution import Solution
 from simulation import simulate, make_seed_phenotypes, make_seed_phenotypes_layer
 
@@ -116,6 +116,23 @@ def simulate_one_individual(afpo, solution : Solution):
     
     return phenotypes[0]
 
+def simulate_one_individual_intervention(afpo, solution : Solution, intervention):
+    init_phenotypes = make_seed_phenotypes_layer(1, 
+                                                n_layers=afpo.n_layers, 
+                                                base_layer=afpo.base_layer)
+    print(init_phenotypes.shape)
+    phenotypes = simulate(
+            np.array([solution.state_genotype]),
+            solution.n_layers,  
+            solution.around_start, 
+            solution.above_start, 
+            phenotypes=init_phenotypes,
+            below_map=afpo.below_map,
+            above_map=afpo.above_map,
+            interventions=np.array([intervention]))
+    
+    return phenotypes[0]
+
 def simulate_n_individuals(afpo, solutions):
     n = len(solutions)
     n_layers = solutions[0].n_layers
@@ -133,3 +150,7 @@ def simulate_n_individuals(afpo, solutions):
             above_map=afpo.above_map)
     
     return phenotypes
+
+def open_pkl_file(file_path):
+    with open(file_path, 'rb') as f:
+        return pickle.load(f)

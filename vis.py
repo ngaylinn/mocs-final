@@ -13,7 +13,7 @@ from PIL import ImageOps, ImageEnhance
 from optimizers.afpo import AgeFitnessPareto
 from solution import Solution, activation2int
 from simulation import simulate, make_seed_phenotypes, DEAD, ALIVE, make_seed_phenotypes_layer
-from util import simulate_one_individual, simulate_n_individuals
+from util import simulate_one_individual, simulate_n_individuals, open_pkl_file
 
 color_dict = {
     'green': {
@@ -35,6 +35,26 @@ color_dict = {
         'dead_outside': 0xFFFFEEEE,   # Almost white, but not quite, for dead_outside
     }
 }
+
+def visualize_multiple_fitness_over_time(exp_files, save_path='out.png', labels=None):
+    plt.figure(figsize=(10, 8))
+    for exp_file, label in zip(exp_files, labels):
+        exp = open_pkl_file(exp_file)
+        fitness_history = [sol.fitness for sol in exp.best_fitness_history]
+        plt.plot(fitness_history, label=label)
+    plt.legend()
+    plt.xlabel('Generation')
+    plt.ylabel('Loss')
+    plt.savefig(save_path)
+    plt.close()
+
+def visualize_fitness_over_time(exp_file, save_path='out.png'):
+    exp = open_pkl_file(exp_file)
+    fitness_history = [sol.fitness for sol in exp.best_fitness_history]
+
+    plt.plot(fitness_history)
+    plt.savefig(save_path)
+    plt.close()
 
 def visualize_selection_layer_over_time(phenotype, filename, base_layer_idx, target_shape, color, frames=[0, 5, 10, 50, 99]):
     # Frame indices
@@ -174,7 +194,7 @@ def visualize_all_layers(phenotype, filename, base_layer_idx=0):
             dtype=np.uint32)
 
         # Calculate the total width for the new image
-        total_width = w * 5
+        total_width = w * (n_layers + 1)
 
         # Create a new image with the calculated total width
         combined_image = Image.new('RGBA', (total_width, l))
